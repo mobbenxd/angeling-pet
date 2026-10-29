@@ -1,0 +1,45 @@
+README.md
+  s_dac10d5edeebbd::t_28627d91468842 19,23,27-31,70,82,130,134
+docs/Usage.md
+  s_dac10d5edeebbd::t_28627d91468842 1-54
+docs/Updating-and-Uninstalling.md
+  s_dac10d5edeebbd::t_28627d91468842 1-37
+docs/Custom-Pet.md
+  s_dac10d5edeebbd::t_28627d91468842 1-40
+docs/Development.md
+  s_dac10d5edeebbd::t_28627d91468842 1-65
+docs/First-Run.md
+  s_dac10d5edeebbd::t_28627d91468842 1-38
+docs/LINE-Notifications.md
+  s_dac10d5edeebbd::t_28627d91468842 1-54
+docs/How-It-Works.md
+  s_dac10d5edeebbd::t_28627d91468842 1-68
+docs/Installation.md
+  s_dac10d5edeebbd::t_28627d91468842 1-74
+docs/Activity-Bubble.md
+  s_dac10d5edeebbd::t_28627d91468842 1-49
+docs/Emotes-and-Animations.md
+  s_dac10d5edeebbd::t_28627d91468842 1-35
+docs/README.md
+  s_dac10d5edeebbd::t_28627d91468842 1-42
+docs/Requirements.md
+  s_dac10d5edeebbd::t_28627d91468842 1-34
+docs/Troubleshooting.md
+  s_dac10d5edeebbd::t_28627d91468842 1-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34acf61475ebb4eed65064ee0b8d40f88fe32a48",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
