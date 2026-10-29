@@ -1,0 +1,54 @@
+docs/Requirements.md
+  s_dac10d5edeebbd::t_90432607db9639 3,5-8,10,12,14-19,21,23-26
+README.md
+  s_dac10d5edeebbd::t_2e16d4cc2206e4 3,5-7,9-11,15-16,18,21-24,26,73,75-79,83,85-88,90,93-95,98-103,107-108,132-134,136-138,146,149
+scripts/fetch-assets.sh
+  s_dac10d5edeebbd::t_df87da22811ca5 34
+  s_dac10d5edeebbd::t_e663986bd8ee6f 2-8,12,15-29,31-33,35,37-38,43,48-49,51,55,58-60,62
+docs/Emotes-and-Animations.md
+  s_dac10d5edeebbd::t_5312b921cc07a5 32
+docs/Reminders.md
+  s_dac10d5edeebbd::t_5312b921cc07a5 53
+docs/Troubleshooting.md
+  s_dac10d5edeebbd::t_5312b921cc07a5 18-25,31,35,61,74-75
+.gitignore
+  s_dac10d5edeebbd::t_f279f5c39fb3da 12
+docs/Installation.md
+  s_dac10d5edeebbd::t_63c9d11f44971c 3,5-6,9,12,14-16,19,22,25-34,36-47,50-52,56-60,63-65,71,79-84
+scripts/build.sh
+  s_dac10d5edeebbd::t_f279f5c39fb3da 8-10,18
+docs/Custom-Pet.md
+  s_dac10d5edeebbd::t_5312b921cc07a5 11
+get.sh
+  s_dac10d5edeebbd::t_0bd8b3a980559b 1-16
+install.sh
+  s_dac10d5edeebbd::t_fe06cd059ea82b 2,5-6,16,19,21,24-41,43,46-47,52-73,98-107
+docs/Updating-and-Uninstalling.md
+  s_dac10d5edeebbd::t_0e33c6fafd0676 5-12,14,17-19,21,26,31,33,35,38,41
+scripts/package.sh
+  s_dac10d5edeebbd::t_a53f77cbecc290 1-34,36-37
+  s_dac10d5edeebbd::t_d33700ade72867 35
+docs/Development.md
+  s_dac10d5edeebbd::t_9a45b8e9764af6 12-13,55-87
+  s_dac10d5edeebbd::t_48d58570f9ac8d 88
+docs/First-Run.md
+  s_dac10d5edeebbd::t_9a45b8e9764af6 3-16,27,36,42
+docs/README.md
+  s_dac10d5edeebbd::t_5312b921cc07a5 3-6,8-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e59de829d216d09b69b297ceeeb543b63a177d8b",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "unknown"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
