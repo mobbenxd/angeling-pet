@@ -15,7 +15,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 | `~/.claude/angeling-pet/hook.sh` | hook ที่ Claude Code เรียก |
 | `~/.claude/angeling-pet/state/*.json` | สถานะของแต่ละ session |
 | `~/.claude/angeling-pet/reminders.json` | การเตือนที่ตั้งไว้ |
-| `~/.claude/angeling-pet/spritesheet.webp`, `emotes/` | ภาพ |
+| `~/.claude/angeling-pet/spritesheet.webp`, `emotes/`, `sounds/` | ภาพและเสียงเตือน |
 | `~/.claude/settings.json` | ลงทะเบียน hook |
 | `~/Library/LaunchAgents/local.angeling.pet.plist` | เปิดเองตอน login |
 | `defaults read local.angeling.pet` | การตั้งค่า (ตำแหน่ง, ตัวเลือก) |

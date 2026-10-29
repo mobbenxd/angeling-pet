@@ -44,7 +44,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.
   - Optionally pops back out when a session needs you.
 - **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
-- **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), chimes and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
+- **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
 - **LINE notifications**: a green LINE row at the top of the bubble shows the total number of unread LINE messages and the latest message (sender, chat and time). Click it to open LINE. Right-click it to hide it until the next new message. While the bubble is hidden, a green badge on Angeling shows the unread total. Turn it off with **แจ้งเตือน LINE** in the menu.
   - The unread total comes from LINE's Dock badge and needs no permission, but LINE must be running.
   - The latest message is read from the macOS Notification Center database, which needs **Full Disk Access** for `~/Applications/Angeling.app` (System Settings → Privacy & Security → Full Disk Access). Without it, the row shows only the count. LINE notifications must be turned on, and message previews must be on to see the text.
@@ -121,6 +121,7 @@ The artwork is **not** included in this repository. It belongs to its owners: Ra
 
 - **Sprite sheet**: copied from `~/.codex/pets/$ANGELING_CODEX_PET/spritesheet.webp` (default `angeling`). You can also drop any Codex v2 sheet at `assets/spritesheet.webp`: 1536×2288 pixels, 8 columns × 11 rows of 192×208 frames. The rows are idle, running-right, running-left, waving, jumping, failed, waiting, running, review, and two look-around rows.
 - **Emotes**: downloaded from the [iRO Wiki emote list](https://irowiki.org/wiki/Emotes).
+- **Reminder chime**: the Ragnarok Online level-up sound, downloaded from [MyInstants](https://www.myinstants.com/en/instant/level-up-ragnarok/) to `assets/sounds/levelup.mp3`. If the download fails, reminders use a macOS sound.
 
 ## Development
 

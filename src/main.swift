@@ -600,6 +600,11 @@ final class EmoteView: NSImageView {
 }
 
 let emoteDir = baseDir.appendingPathComponent("emotes")
+// Ragnarok level-up jingle (fetched by install.sh); used as the reminder chime when present.
+let levelUpSound = baseDir.appendingPathComponent("sounds/levelup.mp3")
+func alarmSound(_ name: String) -> NSSound? {
+    name == "levelup" ? NSSound(contentsOf: levelUpSound, byReference: false) : (NSSound(named: name)?.copy() as? NSSound)
+}
 let emoteImages: [String: NSImage] = {
     var m: [String: NSImage] = [:]
     for n in ["lv", "heh", "swt", "wah", "omg", "slur"] {
@@ -733,7 +738,11 @@ final class PetController: NSObject, NSMenuDelegate {
         return f
     }()
     var lastChime: Double = 0
-    var reminderSound: String { d.string(forKey: "reminderSound") ?? "Glass" }
+    var reminderSound: String {
+        let hasLevelUp = FileManager.default.fileExists(atPath: levelUpSound.path)
+        let s = d.string(forKey: "reminderSound") ?? (hasLevelUp ? "levelup" : "Glass")
+        return s == "levelup" && !hasLevelUp ? "Glass" : s
+    }
     let toggle = ToggleButton(frame: .zero)
     let emote = EmoteView(frame: .zero)
     var emoteName: String?
@@ -868,10 +877,11 @@ final class PetController: NSObject, NSMenuDelegate {
     func chime(_ times: Int) {
         lastChime = Date().timeIntervalSince1970
         guard reminderSound != "off", ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil else { return }
+        let gap = max(1.3, (alarmSound(reminderSound)?.duration ?? 1) + 0.4)
         for i in 0..<times {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 1.3) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * gap) { [weak self] in
                 guard let self else { return }
-                (NSSound(named: self.reminderSound)?.copy() as? NSSound)?.play()
+                alarmSound(self.reminderSound)?.play()
             }
         }
     }
@@ -1094,7 +1104,9 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         m.addItem(withTitle: "การเตือนที่ตั้งไว้ (\(reminders.items.count))", action: nil, keyEquivalent: "").submenu = list
         let sounds = NSMenu()
-        for (title, name) in [("Glass", "Glass"), ("Ping", "Ping"), ("Hero", "Hero"), ("Submarine", "Submarine"), ("Funk", "Funk"), ("ปิดเสียง", "off")] {
+        var choices = [("Glass", "Glass"), ("Ping", "Ping"), ("Hero", "Hero"), ("Submarine", "Submarine"), ("Funk", "Funk"), ("ปิดเสียง", "off")]
+        if FileManager.default.fileExists(atPath: levelUpSound.path) { choices.insert(("Level Up (Ragnarok)", "levelup"), at: 0) }
+        for (title, name) in choices {
             let i = sounds.addItem(withTitle: title, action: #selector(setReminderSound(_:)), keyEquivalent: "")
             i.target = self; i.representedObject = name; i.state = reminderSound == name ? .on : .off
         }

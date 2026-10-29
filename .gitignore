@@ -2,6 +2,8 @@
 assets/spritesheet.*
 assets/emotes/*
 !assets/emotes/.gitkeep
+assets/sounds/*
+!assets/sounds/.gitkeep
 
 # Build output
 build/

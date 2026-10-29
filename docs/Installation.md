@@ -40,7 +40,7 @@ Done. Angeling is in the bottom-right corner; ⌥⌘A shows/hides it.
 
 | ขั้น | ผลลัพธ์ |
 |---|---|
-| Assets | คัดลอก sprite sheet ไปที่ `assets/` และดาวน์โหลด emote 6 ตัว |
+| Assets | คัดลอก sprite sheet ไปที่ `assets/` และดาวน์โหลด emote 6 ตัว กับเสียง Level Up |
 | Build | คอมไพล์ `~/Applications/Angeling.app` |
 | Runtime files | คัดลอก hook และภาพไปที่ `~/.claude/angeling-pet/` |
 | Claude Code hooks | เพิ่ม hook 11 event ใน `~/.claude/settings.json` โดยไม่แตะ hook เดิม และสำรองไฟล์เดิมไว้ก่อน รันซ้ำได้ ไม่เพิ่มซ้ำ |
@@ -66,6 +66,7 @@ Done. Angeling is in the bottom-right corner; ⌥⌘A shows/hides it.
 | `swiftc not found` | `xcode-select --install` |
 | `jq not found` | `brew install jq` |
 | `Missing sprite sheet` | ติดตั้งเพ็ต Angeling ใน Codex หรือดู [เปลี่ยนเป็นเพ็ตตัวอื่น](Custom-Pet.md) |
+| `Could not download the level-up sound` | ไม่เป็นไร การเตือนจะใช้เสียง Glass แทน รัน `./install.sh` ซ้ำภายหลังเพื่อลองโหลดใหม่ |
 | `Could not download emote` | ไม่เป็นไร ใช้งานได้ปกติ แค่ไม่มี emote รัน `./install.sh` ซ้ำภายหลังเพื่อลองโหลดใหม่ |
 
 ปัญหาอื่นดูที่ [แก้ปัญหา](Troubleshooting.md)

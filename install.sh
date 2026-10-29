@@ -24,11 +24,12 @@ echo "==> Build"
 "$ROOT/scripts/build.sh" "$APP"
 
 echo "==> Runtime files ($RUNTIME)"
-mkdir -p "$RUNTIME/state" "$RUNTIME/emotes"
+mkdir -p "$RUNTIME/state" "$RUNTIME/emotes" "$RUNTIME/sounds"
 cp "$ROOT/hooks/angeling-hook.sh" "$RUNTIME/hook.sh"
 chmod +x "$RUNTIME/hook.sh"
 cp "$ROOT/assets/spritesheet.webp" "$RUNTIME/spritesheet.webp"
 cp "$ROOT"/assets/emotes/*.gif "$RUNTIME/emotes/" 2>/dev/null || true
+cp "$ROOT"/assets/sounds/*.mp3 "$RUNTIME/sounds/" 2>/dev/null || true
 
 echo "==> Claude Code hooks ($SETTINGS)"
 mkdir -p "$(dirname "$SETTINGS")"

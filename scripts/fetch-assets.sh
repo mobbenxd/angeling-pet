@@ -3,10 +3,11 @@
 # their owners (Gravity / the Codex pet author), so each user fetches their own copy.
 #   assets/spritesheet.webp  - Codex pet sprite sheet (v2, 1536x2288), taken from ~/.codex/pets
 #   assets/emotes/*.gif      - Ragnarok Online emotes, downloaded from irowiki.org
+#   assets/sounds/levelup.mp3 - Ragnarok Online level-up sound (reminder chime), from myinstants.com
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ASSETS="$ROOT/assets"
-mkdir -p "$ASSETS/emotes"
+mkdir -p "$ASSETS/emotes" "$ASSETS/sounds"
 
 # 1. Sprite sheet: any Codex pet works; default is "angeling".
 PET="${ANGELING_CODEX_PET:-angeling}"
@@ -35,3 +36,16 @@ for pair in lv:b/b6/Lov.gif heh:5/57/Heh.gif swt:1/17/Swt.gif wah:5/5c/Wah.gif o
     rm -f "$tmp"; echo "Could not download emote '$name' (Angeling works without it)" >&2
   fi
 done
+
+# 3. Reminder chime: the Ragnarok Online level-up sound.
+out="$ASSETS/sounds/levelup.mp3"
+if [ ! -s "$out" ]; then
+  tmp=$(mktemp)
+  if curl -fsSL --retry 4 --retry-delay 3 --retry-all-errors -A "Mozilla/5.0" -o "$tmp" \
+       "https://www.myinstants.com/media/sounds/ragnarok-online-level-up-sound.mp3" \
+     && file -b "$tmp" | grep -qi "audio"; then
+    chmod 644 "$tmp"; mv "$tmp" "$out"; echo "Sound: levelup"
+  else
+    rm -f "$tmp"; echo "Could not download the level-up sound (reminders use a macOS sound instead)" >&2
+  fi
+fi
