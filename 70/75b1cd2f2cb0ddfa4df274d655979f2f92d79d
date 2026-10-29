@@ -1,0 +1,45 @@
+docs/How-It-Works.md
+  s_dac10d5edeebbd::t_794819223b82a3 17,63-68
+  s_dac10d5edeebbd::t_d594104d88cb7f 69
+docs/Usage.md
+  s_dac10d5edeebbd::t_794819223b82a3 10,36,44-47
+docs/Emotes-and-Animations.md
+  s_dac10d5edeebbd::t_794819223b82a3 12,16
+docs/Activity-Bubble.md
+  s_dac10d5edeebbd::t_794819223b82a3 31-32
+src/main.swift
+  s_dac10d5edeebbd::t_f17b6f55e5d435 13,17,127,729-736,831-832,851-968,1085-1103,1187,1203-1205,1284-1285,1293,1296,1336,1439
+  s_dac10d5edeebbd::t_704ca554eae3c8 314-315
+  s_dac10d5edeebbd::t_d84db5354fd891 456,1529,1534
+  s_dac10d5edeebbd::t_d18aa856a71c76 274-313,316-455,457-502
+  s_dac10d5edeebbd::t_ffb37ebceb008b 1481,1483-1485,1487-1501,1514
+  s_dac10d5edeebbd::t_721cb244dad90f 1527
+docs/Updating-and-Uninstalling.md
+  s_dac10d5edeebbd::t_794819223b82a3 13
+docs/README.md
+  s_dac10d5edeebbd::t_794819223b82a3 3,21
+README.md
+  s_dac10d5edeebbd::t_794819223b82a3 29-31,47,114
+docs/Reminders.md
+  s_dac10d5edeebbd::t_510f0af3f84f83 1-70
+scripts/build.sh
+  s_dac10d5edeebbd::t_ffb37ebceb008b 8,19-20
+docs/Development.md
+  s_dac10d5edeebbd::t_794819223b82a3 40-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7075b1cd2f2cb0ddfa4df274d655979f2f92d79d",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
