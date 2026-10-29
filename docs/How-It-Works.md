@@ -14,6 +14,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 | `~/Applications/Angeling.app` | ตัวแอป |
 | `~/.claude/angeling-pet/hook.sh` | hook ที่ Claude Code เรียก |
 | `~/.claude/angeling-pet/state/*.json` | สถานะของแต่ละ session |
+| `~/.claude/angeling-pet/reminders.json` | การเตือนที่ตั้งไว้ |
 | `~/.claude/angeling-pet/spritesheet.webp`, `emotes/` | ภาพ |
 | `~/.claude/settings.json` | ลงทะเบียน hook |
 | `~/Library/LaunchAgents/local.angeling.pet.plist` | เปิดเองตอน login |
@@ -58,6 +59,13 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 - เขียนด้วย Swift + AppKit ในไฟล์เดียว ไม่มี dependency และไม่ใช้เน็ต
 - เป็นหน้าต่างลอยที่ไม่แย่งโฟกัส อยู่ทุก Space และไม่มีไอคอนใน Dock
 - คีย์ลัด ⌥⌘A ใช้ Carbon hotkey จึงไม่ต้องขอสิทธิ์ Accessibility
+
+## การเตือน
+
+- เก็บใน `reminders.json` (ชื่อ, เวลา, `eventId` ของ event ในปฏิทิน, เวลาเลื่อน, เวลาที่เริ่มเตือน)
+- สร้าง event ผ่าน EventKit ต้องได้สิทธิ์ Full Access เพื่ออ่าน event กลับมาได้
+- ซิงก์กับปฏิทินเมื่อ EventKit แจ้งว่ามีการเปลี่ยนแปลง และทุก 60 วินาที: ถ้า event ถูกย้าย เวลาเตือนจะย้ายตาม ถ้าถูกลบ การเตือนจะถูกยกเลิก (เฉพาะการเตือนที่ยังไม่ดัง)
+- ตรวจทุก 0.5 วินาทีพร้อมกับ state ของ session
 
 ## LINE
 

@@ -10,9 +10,11 @@
 //   menu bar icon      always there; shows/hides Angeling, lists sessions
 //   ⌥⌘A                show / hide Angeling
 //   LINE row           unread total + latest message; click opens LINE
+//   ⌥⌘R                set a reminder (also added to Calendar); Angeling chimes at the time
 import AppKit
 import Carbon.HIToolbox
 import SQLite3
+import EventKit
 
 let home = FileManager.default.homeDirectoryForCurrentUser
 let baseDir = home.appendingPathComponent(".claude/angeling-pet")
@@ -122,6 +124,7 @@ func priority(_ st: String) -> Int {
     }
 }
 
+let alarmOrange = NSColor(calibratedRed: 0.93, green: 0.48, blue: 0.08, alpha: 1)
 let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
 let lineTime: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
 let icons: [String: String] = ["waiting": "🙋", "failed": "😣", "running": "⚙️", "review": "🔍", "done": "✨", "idle": "💤"]
@@ -265,6 +268,235 @@ enum LineWatch {
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
+    }
+}
+
+// MARK: - Reminders
+//   Set from the reminder form (⌥⌘R). Each one is also a 30-min event in Calendar (EventKit);
+//   moving or deleting that event in Calendar moves or drops the reminder. At the time,
+//   Angeling pops out, chimes, and keeps an alert row until you click it or snooze it.
+
+struct Reminder: Codable, Equatable {
+    var id = UUID().uuidString
+    var title: String
+    var date: Double             // event start (unix)
+    var eventId: String?         // the Calendar event, when one was added
+    var snoozedUntil: Double?
+    var firedAt: Double?         // when it started ringing
+    var alertAt: Double { snoozedUntil ?? date }
+}
+
+let reminderTime: DateFormatter = { let f = DateFormatter(); f.locale = Locale(identifier: "th_TH"); f.dateFormat = "d MMM HH:mm"; return f }()
+func reminderWhen(_ t: Double) -> String {
+    let d = Date(timeIntervalSince1970: t)
+    return Calendar.current.isDateInToday(d) ? lineTime.string(from: d) : reminderTime.string(from: d)
+}
+
+final class ReminderStore {
+    let ek = EKEventStore()
+    private(set) var items: [Reminder] = []
+    let url = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ANGELING_REMINDERS"]
+                  ?? baseDir.appendingPathComponent("reminders.json").path)
+
+    init() {
+        items = (try? JSONDecoder().decode([Reminder].self, from: Data(contentsOf: url))) ?? []
+        NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: ek, queue: .main) { [weak self] _ in
+            self?.syncWithCalendar()
+        }
+    }
+
+    private func save() {
+        items.sort { $0.alertAt < $1.alertAt }
+        try? JSONEncoder().encode(items).write(to: url, options: .atomic)
+    }
+
+    var calendarAccess: Bool {
+        // .fullAccess (macOS 14+) and the older .authorized share raw value 3.
+        EKEventStore.authorizationStatus(for: .event).rawValue == 3
+    }
+    var accessUndetermined: Bool { EKEventStore.authorizationStatus(for: .event) == .notDetermined }
+
+    func requestAccess(_ done: @escaping (Bool) -> Void) {
+        let finish: (Bool, Error?) -> Void = { ok, _ in DispatchQueue.main.async { done(ok) } }
+        if #available(macOS 14, *) { ek.requestFullAccessToEvents(completion: finish) }
+        else { ek.requestAccess(to: .event, completion: finish) }
+    }
+
+    var writableCalendars: [EKCalendar] {
+        calendarAccess ? ek.calendars(for: .event).filter(\.allowsContentModifications) : []
+    }
+
+    /// Saves the reminder, adding a Calendar event when `calendar` is given. Returns an error message on failure.
+    func add(title: String, date: Date, calendar: EKCalendar?) -> String? {
+        var r = Reminder(title: title, date: date.timeIntervalSince1970)
+        if let cal = calendar {
+            let ev = EKEvent(eventStore: ek)
+            ev.title = title
+            ev.startDate = date
+            ev.endDate = date.addingTimeInterval(1800)
+            ev.calendar = cal
+            ev.notes = "ตั้งเตือนจาก Angeling"
+            do { try ek.save(ev, span: .thisEvent); r.eventId = ev.eventIdentifier }
+            catch { return "เพิ่มลงปฏิทินไม่สำเร็จ: \(error.localizedDescription)" }
+        }
+        items.append(r)
+        save()
+        return nil
+    }
+
+    func remove(_ id: String, deleteEvent: Bool = false) {
+        guard let r = items.first(where: { $0.id == id }) else { return }
+        if deleteEvent, let eid = r.eventId, let ev = ek.event(withIdentifier: eid) { try? ek.remove(ev, span: .thisEvent) }
+        items.removeAll { $0.id == id }
+        save()
+    }
+
+    func update(_ id: String, _ change: (inout Reminder) -> Void) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        change(&items[i])
+        save()
+    }
+
+    /// Follow edits made in Calendar: a moved event moves the reminder, a deleted one drops it.
+    func syncWithCalendar() {
+        guard calendarAccess else { return }
+        var changed = false
+        items = items.compactMap { r in
+            guard let eid = r.eventId, r.firedAt == nil else { return r }
+            guard let ev = ek.event(withIdentifier: eid) else { changed = true; return nil }
+            var n = r
+            n.title = ev.title ?? r.title
+            n.date = ev.startDate.timeIntervalSince1970
+            if n != r { changed = true }
+            return n
+        }
+        if changed { save() }
+    }
+}
+
+/// Small window: what, when, which calendar.
+final class ReminderForm: NSObject {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 262),
+                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    let titleField = NSTextField()
+    let picker = NSDatePicker()
+    let addToCalendar = NSButton(checkboxWithTitle: "เพิ่มลงปฏิทิน", target: nil, action: nil)
+    let calendarPopup = NSPopUpButton()
+    let note = NSTextField(labelWithString: "")
+    let store: ReminderStore
+    var onSaved: (() -> Void)?
+    var calendars: [EKCalendar] = []
+
+    init(store: ReminderStore) {
+        self.store = store
+        super.init()
+        window.title = "ตั้งเตือนกับ Angeling"
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        let v = window.contentView!
+        func label(_ t: String, y: CGFloat) {
+            let l = NSTextField(labelWithString: t)
+            l.font = .boldSystemFont(ofSize: 12)
+            l.frame = NSRect(x: 20, y: y, width: 340, height: 17)
+            v.addSubview(l)
+        }
+        label("จะทำอะไร", y: 230)
+        titleField.placeholderString = "เช่น ประชุมทีม, โทรหาแม่"
+        titleField.frame = NSRect(x: 20, y: 202, width: 340, height: 24)
+        v.addSubview(titleField)
+
+        label("เมื่อไร", y: 174)
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = [.yearMonthDay, .hourMinute]
+        picker.frame = NSRect(x: 20, y: 146, width: 200, height: 24)
+        v.addSubview(picker)
+        var x: CGFloat = 20
+        for (t, sel) in [("+15 นาที", #selector(plus15)), ("+1 ชม.", #selector(plus60)), ("พรุ่งนี้ 9:00", #selector(tomorrow9))] {
+            let b = NSButton(title: t, target: self, action: sel)
+            b.controlSize = .small
+            b.font = .systemFont(ofSize: 11)
+            b.sizeToFit()
+            b.frame.origin = NSPoint(x: x, y: 116)
+            v.addSubview(b)
+            x += b.frame.width + 6
+        }
+
+        addToCalendar.frame = NSRect(x: 20, y: 80, width: 120, height: 20)
+        addToCalendar.target = self
+        addToCalendar.action = #selector(calendarToggled)
+        v.addSubview(addToCalendar)
+        calendarPopup.frame = NSRect(x: 140, y: 76, width: 220, height: 26)
+        v.addSubview(calendarPopup)
+
+        note.font = .systemFont(ofSize: 11)
+        note.textColor = .secondaryLabelColor
+        note.lineBreakMode = .byWordWrapping
+        note.maximumNumberOfLines = 2
+        note.frame = NSRect(x: 20, y: 44, width: 340, height: 28)
+        v.addSubview(note)
+
+        let cancel = NSButton(title: "ยกเลิก", target: self, action: #selector(cancel))
+        cancel.keyEquivalent = "\u{1b}"
+        cancel.frame = NSRect(x: 176, y: 10, width: 90, height: 30)
+        v.addSubview(cancel)
+        let ok = NSButton(title: "ตั้งเตือน", target: self, action: #selector(save))
+        ok.keyEquivalent = "\r"
+        ok.frame = NSRect(x: 270, y: 10, width: 90, height: 30)
+        v.addSubview(ok)
+    }
+
+    func show() {
+        titleField.stringValue = ""
+        note.stringValue = ""
+        // Next half hour.
+        let now = Date().timeIntervalSince1970
+        picker.dateValue = Date(timeIntervalSince1970: (floor(now / 1800) + 1) * 1800)
+        addToCalendar.state = UserDefaults.standard.object(forKey: "reminderAddToCalendar") as? Bool ?? true ? .on : .off
+        reloadCalendars()
+        if store.accessUndetermined && ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil { store.requestAccess { [weak self] _ in self?.reloadCalendars() } }
+        NSApp.activate(ignoringOtherApps: true)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(titleField)
+    }
+
+    func reloadCalendars() {
+        calendars = store.writableCalendars
+        calendarPopup.removeAllItems()
+        for c in calendars { calendarPopup.addItem(withTitle: c.title) }
+        let saved = UserDefaults.standard.string(forKey: "reminderCalendar")
+        let def = store.calendarAccess ? store.ek.defaultCalendarForNewEvents?.calendarIdentifier : nil
+        if let i = calendars.firstIndex(where: { $0.calendarIdentifier == saved }) ?? calendars.firstIndex(where: { $0.calendarIdentifier == def }) {
+            calendarPopup.selectItem(at: i)
+        }
+        addToCalendar.isEnabled = !calendars.isEmpty
+        calendarToggled()
+        if !store.calendarAccess && !store.accessUndetermined {
+            note.stringValue = "Angeling ยังไม่ได้รับสิทธิ์เข้าถึงปฏิทิน จะเตือนใน Angeling อย่างเดียว (ให้สิทธิ์ได้ที่เมนู → ให้สิทธิ์ปฏิทิน…)"
+        }
+    }
+
+    @objc func calendarToggled() { calendarPopup.isEnabled = addToCalendar.isEnabled && addToCalendar.state == .on }
+    @objc func plus15() { picker.dateValue = picker.dateValue.addingTimeInterval(900) }
+    @objc func plus60() { picker.dateValue = picker.dateValue.addingTimeInterval(3600) }
+    @objc func tomorrow9() {
+        let cal = Calendar.current
+        let t = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: Date()))!
+        picker.dateValue = cal.date(bySettingHour: 9, minute: 0, second: 0, of: t)!
+    }
+    @objc func cancel() { window.close() }
+
+    @objc func save() {
+        let title = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { note.stringValue = "ใส่ก่อนว่าจะทำอะไรนะ~"; NSSound.beep(); return }
+        guard picker.dateValue.timeIntervalSinceNow > -60 else { note.stringValue = "เวลานี้ผ่านไปแล้ว เลือกเวลาใหม่นะ"; NSSound.beep(); return }
+        let useCalendar = addToCalendar.isEnabled && addToCalendar.state == .on
+        let cal = useCalendar && calendarPopup.indexOfSelectedItem >= 0 ? calendars[calendarPopup.indexOfSelectedItem] : nil
+        if let err = store.add(title: title, date: picker.dateValue, calendar: cal) { note.stringValue = err; NSSound.beep(); return }
+        UserDefaults.standard.set(addToCalendar.state == .on, forKey: "reminderAddToCalendar")
+        if let c = cal { UserDefaults.standard.set(c.calendarIdentifier, forKey: "reminderCalendar") }
+        window.close()
+        onSaved?()
     }
 }
 
@@ -494,6 +726,14 @@ final class PetController: NSObject, NSMenuDelegate {
     let lineBadge = BadgeView(frame: .zero)
     var line = LineStatus()
     var lineDismissed: (Int, Double)?  // (unread, latest date) when the LINE row was hidden
+    let reminders = ReminderStore()
+    lazy var reminderForm: ReminderForm = {
+        let f = ReminderForm(store: reminders)
+        f.onSaved = { [weak self] in self?.setOverride("waving", for: 1.2); self?.showEmote("heh", for: 2.5); self?.refresh() }
+        return f
+    }()
+    var lastChime: Double = 0
+    var reminderSound: String { d.string(forKey: "reminderSound") ?? "Glass" }
     let toggle = ToggleButton(frame: .zero)
     let emote = EmoteView(frame: .zero)
     var emoteName: String?
@@ -588,6 +828,8 @@ final class PetController: NSObject, NSMenuDelegate {
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
         pollLine()
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollLine() }
+        reminders.syncWithCalendar()
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.reminders.syncWithCalendar() }
     }
 
     func pollLine() {
@@ -605,6 +847,124 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     var lineVisible: Bool { showLine && line.unread > 0 && lineDismissed == nil }
+
+    // MARK: reminders
+
+    func ringing(_ now: Double) -> [Reminder] { reminders.items.filter { $0.alertAt <= now } }
+    func upcoming(_ now: Double) -> [Reminder] { reminders.items.filter { $0.alertAt > now && $0.alertAt - now <= 15 * 60 } }
+
+    /// Start ringing reminders whose time has come; chime again once a minute for 5 minutes.
+    func checkReminders(_ now: Double) {
+        for r in reminders.items where r.alertAt <= now && r.firedAt == nil {
+            reminders.update(r.id) { $0.firedAt = now }
+            if petHidden { petHidden = false; panel.orderFrontRegardless() }
+            setOverride("jumping", for: 1.2)
+            showEmote("omg", for: 4)
+            chime(3)
+        }
+        if let latest = ringing(now).compactMap(\.firedAt).max(), now - latest < 300, now - lastChime >= 60 { chime(1) }
+    }
+
+    func chime(_ times: Int) {
+        lastChime = Date().timeIntervalSince1970
+        guard reminderSound != "off", ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil else { return }
+        for i in 0..<times {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 1.3) { [weak self] in
+                guard let self else { return }
+                (NSSound(named: self.reminderSound)?.copy() as? NSSound)?.play()
+            }
+        }
+    }
+
+    @objc func newReminder() { reminderForm.show() }
+    @objc func reminderDone(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        reminders.remove(id)
+        setOverride("waving", for: 1)
+        refresh()
+    }
+    func reminderDone(id: String) { reminders.remove(id); setOverride("waving", for: 1); showEmote("lv", for: 2.5); refresh() }
+    @objc func reminderSnooze(_ sender: NSMenuItem) {
+        guard let (id, mins) = sender.representedObject as? (String, Int) else { return }
+        reminders.update(id) { $0.snoozedUntil = Date().timeIntervalSince1970 + Double(mins * 60); $0.firedAt = nil }
+        refresh()
+    }
+    @objc func reminderDelete(_ sender: NSMenuItem) {
+        guard let (id, withEvent) = sender.representedObject as? (String, Bool) else { return }
+        reminders.remove(id, deleteEvent: withEvent)
+        refresh()
+    }
+    @objc func setReminderSound(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        d.set(name, forKey: "reminderSound")
+        chime(1)
+    }
+    @objc func openCalendarPrivacy() {
+        if reminders.accessUndetermined { reminders.requestAccess { _ in } }
+        else { Focus.openURL("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Calendars") }
+    }
+
+    func reminderMenu(_ r: Reminder, ringing: Bool) -> NSMenu {
+        let m = NSMenu()
+        func add(_ title: String, _ sel: Selector, _ obj: Any) {
+            let i = m.addItem(withTitle: title, action: sel, keyEquivalent: "")
+            i.target = self
+            i.representedObject = obj
+        }
+        if ringing {
+            add("ทำแล้ว ✓", #selector(reminderDone(_:)), r.id)
+            for mins in [5, 10, 30, 60] { add("เลื่อนไป \(mins < 60 ? "\(mins) นาที" : "1 ชั่วโมง")", #selector(reminderSnooze(_:)), (r.id, mins)) }
+            m.addItem(.separator())
+        }
+        add("ลบการเตือน (เก็บ event ในปฏิทินไว้)", #selector(reminderDelete(_:)), (r.id, false))
+        if r.eventId != nil { add("ลบทั้งการเตือนและ event ในปฏิทิน", #selector(reminderDelete(_:)), (r.id, true)) }
+        return m
+    }
+
+    /// Ringing reminders (orange, stay until handled) and ones due within 15 minutes.
+    func reminderRows(width w: CGFloat, ringingOnly: Bool = false) -> [RowView] {
+        let now = Date().timeIntervalSince1970
+        let bold = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: alarmOrange]
+        let big = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 13), .foregroundColor: NSColor(calibratedWhite: 0.12, alpha: 1)]
+        let normal = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 1)]
+        let dim = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)]
+        var rows: [RowView] = []
+        for r in ringing(now) {
+            let t = NSMutableAttributedString(string: "⏰ ถึงเวลาแล้ว!", attributes: bold)
+            t.append(NSAttributedString(string: "  " + reminderWhen(r.date), attributes: dim))
+            t.append(NSAttributedString(string: "\n" + r.title, attributes: big))
+            t.append(NSAttributedString(string: "\nคลิกเมื่อทำแล้ว · คลิกขวาเพื่อเลื่อน", attributes: dim))
+            let row = RowView(text: t, width: w, clickable: true)
+            row.accent = alarmOrange
+            row.onClick = { [weak self] in self?.reminderDone(id: r.id) }
+            row.onRightClick = { [weak self] e in
+                guard let self else { return }
+                NSMenu.popUpContextMenu(self.reminderMenu(r, ringing: true), with: e, for: row)
+            }
+            rows.append(row)
+        }
+        guard !ringingOnly else { return rows }
+        for r in upcoming(now) {
+            let mins = Int(ceil((r.alertAt - now) / 60))
+            let t = NSMutableAttributedString(string: "⏰ อีก \(mins) นาที", attributes: bold)
+            t.append(NSAttributedString(string: "  " + reminderWhen(r.alertAt), attributes: dim))
+            t.append(NSAttributedString(string: "\n" + r.title, attributes: normal))
+            let row = RowView(text: t, width: w, clickable: true)
+            row.toolTip = "คลิกขวาเพื่อลบการเตือน"
+            row.onRightClick = { [weak self] e in
+                guard let self else { return }
+                NSMenu.popUpContextMenu(self.reminderMenu(r, ringing: false), with: e, for: row)
+            }
+            rows.append(row)
+        }
+        return rows
+    }
+
+    func reminderSignature() -> String {
+        let now = Date().timeIntervalSince1970
+        return ringing(now).map { "R\($0.id)\($0.title)" }.joined() + "|"
+            + upcoming(now).map { "U\($0.id)\($0.title)\(Int(ceil(($0.alertAt - now) / 60)))" }.joined()
+    }
 
     func statusIcon() -> NSImage? {
         guard let f = sheet.frame(row: 0, col: 0) else { return nil }
@@ -722,6 +1082,25 @@ final class PetController: NSObject, NSMenuDelegate {
         } else {
             item(expanded ? "ย่อรายการ" : "ดูทุก session", #selector(toggleExpand))
         }
+        item("⏰ ตั้งเตือน… (⌥⌘R)", #selector(newReminder))
+        let list = NSMenu()
+        if reminders.items.isEmpty {
+            list.addItem(withTitle: "ยังไม่มีการเตือน", action: nil, keyEquivalent: "").isEnabled = false
+        }
+        let now = Date().timeIntervalSince1970
+        for r in reminders.items {
+            let i = list.addItem(withTitle: "\(reminderWhen(r.alertAt)) — \(r.title)", action: nil, keyEquivalent: "")
+            i.submenu = reminderMenu(r, ringing: r.alertAt <= now)
+        }
+        m.addItem(withTitle: "การเตือนที่ตั้งไว้ (\(reminders.items.count))", action: nil, keyEquivalent: "").submenu = list
+        let sounds = NSMenu()
+        for (title, name) in [("Glass", "Glass"), ("Ping", "Ping"), ("Hero", "Hero"), ("Submarine", "Submarine"), ("Funk", "Funk"), ("ปิดเสียง", "off")] {
+            let i = sounds.addItem(withTitle: title, action: #selector(setReminderSound(_:)), keyEquivalent: "")
+            i.target = self; i.representedObject = name; i.state = reminderSound == name ? .on : .off
+        }
+        m.addItem(withTitle: "เสียงเตือน", action: nil, keyEquivalent: "").submenu = sounds
+        if !reminders.calendarAccess { item("ให้สิทธิ์ปฏิทิน…", #selector(openCalendarPrivacy)) }
+        m.addItem(.separator())
         item(activityHidden ? "แสดงกิจกรรม" : "ซ่อนกิจกรรม", #selector(toggleActivity))
         if !forStatusBar { item("ซ่อน Angeling (⌥⌘A)", #selector(togglePet)) }
         let opts = NSMenu()
@@ -805,6 +1184,7 @@ final class PetController: NSObject, NSMenuDelegate {
             }
         let live = visibleSessions()
         let primary = live.first
+        checkReminders(now)
 
         // A tucked-away Angeling pops back out when a session starts waiting on you.
         let newlyWaiting = live.contains { $0.1 == "waiting" && !previouslyWaiting.contains($0.0.session ?? "") }
@@ -820,6 +1200,9 @@ final class PetController: NSObject, NSMenuDelegate {
         // Pet animation
         if let o = overrideAnim, Date() < overrideUntil {
             play(o)
+        } else if !ringing(now).isEmpty {
+            overrideAnim = nil
+            play("waving")
         } else {
             overrideAnim = nil
             var st = primary?.1 ?? "idle"
@@ -898,7 +1281,8 @@ final class PetController: NSObject, NSMenuDelegate {
         if let p = pick { showEmote(p.0, for: p.1) }
         else if Date() > emoteUntil {
             // Keep calling for help while someone is waiting on you.
-            if live.first?.1 == "waiting" { showEmote("wah", for: 1) }
+            if !ringing(now).isEmpty { showEmote("omg", for: 1) }
+            else if live.first?.1 == "waiting" { showEmote("wah", for: 1) }
             else if !emote.isHidden { emote.isHidden = true; emoteName = nil; emote.image = nil; placeEmote() }
         }
     }
@@ -906,10 +1290,10 @@ final class PetController: NSObject, NSMenuDelegate {
     func layout(_ live: [(SessionState, String)]) {
         guard !petHidden else { return }
         // Rebuilding every tick would swallow clicks and hover, so only rebuild on change.
-        let sig = activityHidden ? "hidden" : rowsSignature(live)
+        let sig = activityHidden ? "hidden|" + reminderSignature() : rowsSignature(live)
         if sig != lastRowsSig {
             lastRowsSig = sig
-            let rows = activityHidden ? [] : makeRows(live)
+            let rows = activityHidden ? reminderRows(width: winWidth - bubble.pad * 2, ringingOnly: true) : makeRows(live)
             bubbleSize = rows.isEmpty ? .zero : bubble.set(rows: rows, width: winWidth)
         }
         let showBubble = bubbleSize != .zero
@@ -949,7 +1333,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let now = Date().timeIntervalSince1970
         let idleQuiet = live.first.map { $0.1 == "idle" && now - ($0.0.updated ?? 0) > 60 } ?? true
         let lineSig = lineVisible ? "\(line.unread)|\(line.date)|\(line.title)|\(line.body)|\(line.canReadMessages)" : "-"
-        return "\(expanded)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|" + live.map { s, st in
+        return "\(expanded)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -1052,7 +1436,7 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
-        let lineRows = lineVisible ? [lineRow()] : []
+        let lineRows = reminderRows(width: w) + (lineVisible ? [lineRow()] : [])
 
         if expanded {
             if live.isEmpty && lineRows.isEmpty {
@@ -1094,17 +1478,28 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 }
 
-// MARK: - Global hotkey ⌥⌘A (Carbon; needs no Accessibility permission)
+// MARK: - Global hotkeys ⌥⌘A / ⌥⌘R (Carbon; needs no Accessibility permission)
 
-var hotKeyRef: EventHotKeyRef?
-func registerHotKey(_ action: @escaping () -> Void) {
-    hotKeyAction = action
+var hotKeyRefs: [EventHotKeyRef?] = []
+var hotKeyActions: [UInt32: () -> Void] = [:]
+func registerHotKeys(_ keys: [(Int, () -> Void)]) {
     var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-    InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in hotKeyAction?(); return noErr }, 1, &spec, nil, nil)
-    let id = EventHotKeyID(signature: OSType(0x414E474C), id: 1) // 'ANGL'
-    RegisterEventHotKey(UInt32(kVK_ANSI_A), UInt32(cmdKey | optionKey), id, GetApplicationEventTarget(), 0, &hotKeyRef)
+    InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+        var hk = EventHotKeyID()
+        GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                          nil, MemoryLayout<EventHotKeyID>.size, nil, &hk)
+        hotKeyActions[hk.id]?()
+        return noErr
+    }, 1, &spec, nil, nil)
+    for (i, (code, action)) in keys.enumerated() {
+        let id = UInt32(i + 1)
+        hotKeyActions[id] = action
+        var ref: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(code), UInt32(cmdKey | optionKey), EventHotKeyID(signature: OSType(0x414E474C), id: id), // 'ANGL'
+                            GetApplicationEventTarget(), 0, &ref)
+        hotKeyRefs.append(ref)
+    }
 }
-var hotKeyAction: (() -> Void)?
 
 // MARK: - App entry
 
@@ -1116,7 +1511,7 @@ guard let sheet = SpriteSheet(url: baseDir.appendingPathComponent("spritesheet.w
     exit(1)
 }
 let controller = PetController(sheet: sheet)
-registerHotKey { controller.togglePet() }
+registerHotKeys([(kVK_ANSI_A, { controller.togglePet() }), (kVK_ANSI_R, { controller.newReminder() })])
 
 // Debug: ANGELING_SNAPSHOT=/path.png renders the window to a PNG after a moment, then quits.
 if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
@@ -1129,13 +1524,14 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     controller.refresh()
     if env["ANGELING_HOVER"] != nil { controller.toggle.isHidden = false }
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }
+    if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        let v = controller.panel.contentView!
+        let v = env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!
         if let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
             v.cacheDisplay(in: v.bounds, to: rep)
             let bg = NSImage(size: v.bounds.size)
             bg.lockFocus()
-            NSColor(calibratedWhite: 0.35, alpha: 1).setFill(); v.bounds.fill()
+            (env["ANGELING_FORM"] != nil ? NSColor.windowBackgroundColor : NSColor(calibratedWhite: 0.35, alpha: 1)).setFill(); v.bounds.fill()
             rep.draw(in: v.bounds)
             bg.unlockFocus()
             if let t = bg.tiffRepresentation, let b = NSBitmapImageRep(data: t),

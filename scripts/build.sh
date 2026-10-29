@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${1:-$HOME/Applications/Angeling.app}"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-swiftc -O -o "$APP/Contents/MacOS/Angeling" "$ROOT/src/main.swift" -framework AppKit -framework Carbon -lsqlite3
+swiftc -O -o "$APP/Contents/MacOS/Angeling" "$ROOT/src/main.swift" -framework AppKit -framework Carbon -framework EventKit -lsqlite3
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -16,6 +16,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>LSUIElement</key><true/>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>Angeling adds your reminders to Calendar and follows them if you move or delete the event.</string>
+  <key>NSCalendarsUsageDescription</key><string>Angeling adds your reminders to Calendar and follows them if you move or delete the event.</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
 </dict></plist>
 PLIST

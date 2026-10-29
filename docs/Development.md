@@ -37,6 +37,8 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_HOVER=1` | แสดงปุ่มซ่อนหรือแสดง |
 | `ANGELING_EMOTE=lv` | บังคับให้แสดง emote |
 | `ANGELING_LINE_UNREAD=5` | จำลองจำนวน LINE ที่ยังไม่อ่าน |
+| `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
+| `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
 | `ANGELING_NOTIF_DB=/path/db` | ใช้ฐานข้อมูลแจ้งเตือนจำลอง |
 
 ## ทดสอบ hook
