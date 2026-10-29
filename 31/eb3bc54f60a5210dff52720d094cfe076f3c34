@@ -1,0 +1,52 @@
+docs/wiki/LINE-Notifications.md
+  s_dac10d5edeebbd::t_84802d5d0ddd9c 1-51
+docs/wiki/Custom-Pet.md
+  s_dac10d5edeebbd::t_cd05ff743ac89f 1-37
+scripts/publish-wiki.sh
+  s_dac10d5edeebbd::t_e07780f39f5812 1-23
+README.md
+  s_dac10d5edeebbd::t_a96cd77bf5d169 64-70,74,79,82-88,125,127,130,134
+  s_dac10d5edeebbd::t_da3dc787e617b0 9-32
+docs/wiki/Installation.md
+  s_dac10d5edeebbd::t_5652b90e4ea2fe 1-71
+docs/wiki/_Sidebar.md
+  s_dac10d5edeebbd::t_017616c476c1a8 1-21
+docs/wiki/How-It-Works.md
+  s_dac10d5edeebbd::t_dd3d08cd9ba69f 1-65
+docs/wiki/Updating-and-Uninstalling.md
+  s_dac10d5edeebbd::t_b72fed5df91a7b 1-34
+docs/wiki/Usage.md
+  s_dac10d5edeebbd::t_e17fa8ee366e17 1-51
+docs/wiki/Troubleshooting.md
+  s_dac10d5edeebbd::t_57a72eb8dba39c 1-68
+docs/wiki/Development.md
+  s_dac10d5edeebbd::t_c453e41ae1b4c0 1-69
+docs/wiki/Home.md
+  s_dac10d5edeebbd::t_2ddda2c0fe07ca 1-39
+docs/wiki/First-Run.md
+  s_dac10d5edeebbd::t_fb01b032c4603b 1-35
+docs/wiki/Activity-Bubble.md
+  s_dac10d5edeebbd::t_9076433850a26c 1-46
+docs/wiki/Emotes-and-Animations.md
+  s_dac10d5edeebbd::t_a54e137b81915a 1-32
+docs/wiki/Requirements.md
+  s_dac10d5edeebbd::t_8546601e0aad33 1-31
+docs/wiki/_Footer.md
+  s_dac10d5edeebbd::t_2b0fe5a372dac2 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31eb3bc54f60a5210dff52720d094cfe076f3c34",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
