@@ -9,8 +9,10 @@
 //   right-click pet    menu: hide activity, hide Angeling, …
 //   menu bar icon      always there; shows/hides Angeling, lists sessions
 //   ⌥⌘A                show / hide Angeling
+//   LINE row           unread total + latest message; click opens LINE
 import AppKit
 import Carbon.HIToolbox
+import SQLite3
 
 let home = FileManager.default.homeDirectoryForCurrentUser
 let baseDir = home.appendingPathComponent(".claude/angeling-pet")
@@ -120,6 +122,8 @@ func priority(_ st: String) -> Int {
     }
 }
 
+let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
+let lineTime: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
 let icons: [String: String] = ["waiting": "🙋", "failed": "😣", "running": "⚙️", "review": "🔍", "done": "✨", "idle": "💤"]
 let statusLabel: [String: String] = ["waiting": "รอคุณ", "failed": "ติดปัญหา", "running": "กำลังทำ",
                                      "review": "กำลังอ่าน", "done": "เสร็จแล้ว", "idle": "ว่าง"]
@@ -184,6 +188,83 @@ enum Focus {
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
         try? p.run()
+    }
+}
+
+// MARK: - LINE notifications
+//   unread  = LINE's Dock badge (lsappinfo; no permission needed, LINE must be running)
+//   latest  = newest LINE entry in the macOS notification database (needs Full Disk Access)
+
+struct LineStatus: Equatable {
+    var unread = 0
+    var title = ""
+    var body = ""
+    var date: Double = 0       // unix time of the latest notification
+    var canReadMessages = true // false when the notification database is off-limits
+}
+
+enum LineWatch {
+    static let bundle = "jp.naver.line.mac"
+    static var dbPath: String {
+        ProcessInfo.processInfo.environment["ANGELING_NOTIF_DB"]
+            ?? home.appendingPathComponent("Library/Group Containers/group.com.apple.usernoted/db2/db").path
+    }
+
+    static func poll() -> LineStatus {
+        var s = LineStatus()
+        let latest = latestNotification()
+        s.canReadMessages = latest != nil
+        if let l = latest { (s.title, s.body, s.date) = (l.title, l.body, l.date) }
+        s.unread = badgeCount() ?? latest?.badge ?? 0
+        return s
+    }
+
+    /// Dock badge of the running LINE app, e.g. `"StatusLabel"={ "label"="676" }`.
+    static func badgeCount() -> Int? {
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_LINE_UNREAD"] { return Int(fake) }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/lsappinfo")
+        p.arguments = ["info", "-only", "StatusLabel", "-app", bundle]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        let text = String(decoding: data, as: UTF8.self)
+        guard !text.isEmpty else { return nil } // LINE not running
+        guard let r = text.range(of: #""label"="[^"]*""#, options: .regularExpression) else { return 0 }
+        return Int(text[r].filter(\.isNumber)) ?? 0
+    }
+
+    /// Newest LINE notification still in Notification Center; nil when the database can't be opened.
+    static func latestNotification() -> (title: String, body: String, date: Double, badge: Int?)? {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { sqlite3_close(db); return nil }
+        defer { sqlite3_close(db) }
+        var stmt: OpaquePointer?
+        let sql = """
+            SELECT r.data, r.delivered_date, a.badge FROM app a LEFT JOIN record r ON r.app_id = a.app_id
+            WHERE lower(a.identifier) = '\(bundle)' ORDER BY r.delivered_date DESC LIMIT 1
+            """
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return ("", "", 0, nil) } // readable, nothing from LINE
+        let badge = sqlite3_column_type(stmt, 2) == SQLITE_NULL ? nil : Int(sqlite3_column_int(stmt, 2))
+        guard let blob = sqlite3_column_blob(stmt, 0) else { return ("", "", 0, badge) }
+        let data = Data(bytes: blob, count: Int(sqlite3_column_bytes(stmt, 0)))
+        let delivered = sqlite3_column_double(stmt, 1) + 978_307_200 // Core Data epoch -> unix
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let req = plist["req"] as? [String: Any] else { return ("", "", delivered, badge) }
+        let title = [req["titl"], req["subt"]].compactMap { $0 as? String }.filter { !$0.isEmpty }.joined(separator: " · ")
+        let body = (req["body"] as? String ?? "").replacingOccurrences(of: "\n", with: " ")
+        return (title, body, delivered, badge)
+    }
+
+    static func open() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
     }
 }
 
@@ -344,10 +425,16 @@ final class ToggleButton: NSView {
 
 final class BadgeView: NSView {
     var count = 0 { didSet { isHidden = count == 0; needsDisplay = true } }
+    var color = NSColor(calibratedRed: 0.9, green: 0.25, blue: 0.35, alpha: 1)
+    var text: String { count > 999 ? "999+" : "\(count)" }
+    /// Circle for one digit, pill for more.
+    var width: CGFloat { max(18, ceil(NSAttributedString(string: text, attributes: [.font: NSFont.boldSystemFont(ofSize: 11)]).size().width) + 10) }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(calibratedRed: 0.9, green: 0.25, blue: 0.35, alpha: 1).setFill()
-        NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).fill()
-        let s = NSAttributedString(string: "\(count)", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: NSColor.white])
+        color.setFill()
+        let r = bounds.insetBy(dx: 1, dy: 1)
+        NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2).fill()
+        let s = NSAttributedString(string: text, attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: NSColor.white])
         let sz = s.size()
         s.draw(at: NSPoint(x: (bounds.width - sz.width) / 2, y: (bounds.height - sz.height) / 2))
     }
@@ -404,6 +491,9 @@ final class PetController: NSObject, NSMenuDelegate {
     let bubble = BubbleView(frame: .zero)
     let pet = PetView(frame: .zero)
     let badge = BadgeView(frame: .zero)
+    let lineBadge = BadgeView(frame: .zero)
+    var line = LineStatus()
+    var lineDismissed: (Int, Double)?  // (unread, latest date) when the LINE row was hidden
     let toggle = ToggleButton(frame: .zero)
     let emote = EmoteView(frame: .zero)
     var emoteName: String?
@@ -432,6 +522,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var showTask: Bool { flag("showTask") }
     var showText: Bool { flag("showText") }
     var showPlan: Bool { flag("showPlan") }
+    var showLine: Bool { flag("showLine") }
 
     let d = UserDefaults.standard
     var activityHidden: Bool { get { d.bool(forKey: "activityHidden") } set { d.set(newValue, forKey: "activityHidden") } }
@@ -460,6 +551,9 @@ final class PetController: NSObject, NSMenuDelegate {
         content.addSubview(bubble)
         content.addSubview(pet)
         content.addSubview(badge)
+        content.addSubview(lineBadge)
+        lineBadge.color = lineGreen
+        lineBadge.toolTip = "LINE ยังไม่อ่าน"
         content.addSubview(toggle)
         bubble.onClick = { [weak self] in self?.clicked() }
         emote.animates = true
@@ -492,7 +586,25 @@ final class PetController: NSObject, NSMenuDelegate {
         play("idle")
         refresh()
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
+        pollLine()
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollLine() }
     }
+
+    func pollLine() {
+        guard showLine else { if line != LineStatus() { line = LineStatus(); refresh() }; return }
+        DispatchQueue.global(qos: .utility).async {
+            let s = LineWatch.poll()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, s != self.line else { return }
+                // A new LINE message brings the row back after it was hidden.
+                if let (n, t) = self.lineDismissed, s.unread > n || s.date > t { self.lineDismissed = nil }
+                self.line = s
+                self.refresh()
+            }
+        }
+    }
+
+    var lineVisible: Bool { showLine && line.unread > 0 && lineDismissed == nil }
 
     func statusIcon() -> NSImage? {
         guard let f = sheet.frame(row: 0, col: 0) else { return nil }
@@ -619,6 +731,8 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         m.addItem(withTitle: "แสดงในบับเบิล", action: nil, keyEquivalent: "").submenu = opts
         item("โผล่ออกมาเมื่อมีงานรอคุณ", #selector(togglePop), on: popWhenWaiting)
+        item("แจ้งเตือน LINE", #selector(toggleLine), on: showLine)
+        if showLine && !line.canReadMessages { item("ให้สิทธิ์ Full Disk Access เพื่ออ่านข้อความ LINE…", #selector(openFullDiskAccess)) }
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
         m.addItem(.separator())
         item("ปิด Angeling", #selector(quit))
@@ -657,6 +771,12 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
     @objc func togglePop() { popWhenWaiting.toggle() }
+    @objc func toggleLine() { d.set(!showLine, forKey: "showLine"); lineDismissed = nil; pollLine(); refresh() }
+    @objc func openFullDiskAccess() {
+        Focus.openURL("x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles")
+    }
+    @objc func openLine() { setOverride("waving", for: 0.8); LineWatch.open() }
+    @objc func dismissLine() { lineDismissed = (line.unread, line.date); refresh() }
     @objc func clearDone() {
         let now = Date().timeIntervalSince1970
         for s in loadSessions() where ["done", "idle"].contains(effective(s, now: now)) {
@@ -814,6 +934,8 @@ final class PetController: NSObject, NSMenuDelegate {
         keepOnScreen()
         pet.frame = NSRect(x: (winWidth - petSize.width) / 2, y: 0, width: petSize.width, height: petSize.height)
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
+        lineBadge.count = activityHidden && showLine ? line.unread : 0
+        lineBadge.frame = NSRect(x: pet.frame.minX - lineBadge.width + 16, y: pet.frame.maxY - 22, width: lineBadge.width, height: 18)
         toggle.frame = NSRect(x: pet.frame.minX - 32, y: 22, width: 28, height: 22)
         toggle.shown = !activityHidden
         emote.frame = emoteRect
@@ -826,7 +948,8 @@ final class PetController: NSObject, NSMenuDelegate {
     func rowsSignature(_ live: [(SessionState, String)]) -> String {
         let now = Date().timeIntervalSince1970
         let idleQuiet = live.first.map { $0.1 == "idle" && now - ($0.0.updated ?? 0) > 60 } ?? true
-        return "\(expanded)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|" + live.map { s, st in
+        let lineSig = lineVisible ? "\(line.unread)|\(line.date)|\(line.title)|\(line.body)|\(line.canReadMessages)" : "-"
+        return "\(expanded)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -899,17 +1022,49 @@ final class PetController: NSObject, NSMenuDelegate {
             return r
         }
 
+        func lineRow() -> RowView {
+            let out = NSMutableAttributedString()
+            func add(_ t: String, _ a: [NSAttributedString.Key: Any]) { out.append(NSAttributedString(string: t, attributes: a)) }
+            add("💬 LINE", [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: lineGreen])
+            add("  ยังไม่อ่าน \(line.unread) ข้อความ", dim)
+            if showText && !line.body.isEmpty {
+                let time = line.date > 0 ? "  " + lineTime.string(from: Date(timeIntervalSince1970: line.date)) : ""
+                if !line.title.isEmpty { add("\n" + line.title, bold.merging([.foregroundColor: NSColor(calibratedWhite: 0.2, alpha: 1)]) { $1 }) }
+                add(time, dim)
+                let body = line.body.count > 90 ? String(line.body.prefix(90)) + "…" : line.body
+                add("\n" + body, normal)
+            }
+            let r = RowView(text: out, width: w, clickable: true)
+            r.accent = lineGreen
+            r.toolTip = line.canReadMessages ? "คลิกเพื่อเปิด LINE · คลิกขวาเพื่อซ่อน"
+                : "คลิกเพื่อเปิด LINE · ให้สิทธิ์ Full Disk Access กับ Angeling เพื่อดูข้อความล่าสุด"
+            r.onClick = { [weak self] in self?.openLine() }
+            r.onRightClick = { [weak self] e in
+                let m = NSMenu()
+                for (title, sel) in [("เปิด LINE", #selector(PetController.openLine)), ("ซ่อนจนกว่าจะมีข้อความใหม่", #selector(PetController.dismissLine)),
+                                     ("ปิดแจ้งเตือน LINE", #selector(PetController.toggleLine))] {
+                    m.addItem(withTitle: title, action: sel, keyEquivalent: "").target = self
+                }
+                if self?.line.canReadMessages == false {
+                    m.addItem(withTitle: "ให้สิทธิ์ Full Disk Access…", action: #selector(PetController.openFullDiskAccess), keyEquivalent: "").target = self
+                }
+                NSMenu.popUpContextMenu(m, with: e, for: r)
+            }
+            return r
+        }
+        let lineRows = lineVisible ? [lineRow()] : []
+
         if expanded {
-            if live.isEmpty {
+            if live.isEmpty && lineRows.isEmpty {
                 return [RowView(text: NSAttributedString(string: "ยังไม่มีงานที่กำลังทำ~", attributes: normal), width: w, clickable: false)]
             }
-            return live.map { sessionRow($0.0, $0.1, detailed: true) }
+            return lineRows + live.map { sessionRow($0.0, $0.1, detailed: true) }
         }
 
         let activeStates = ["running", "review", "waiting", "failed"]
         let active = live.filter { activeStates.contains($0.1) }
         let finished = live.filter { $0.1 == "done" }
-        var rows: [RowView] = []
+        var rows: [RowView] = lineRows
         if let (s, st) = active.first {
             rows.append(sessionRow(s, st, detailed: false))
         }
@@ -970,6 +1125,7 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     controller.petHidden = false
     controller.activityHidden = env["ANGELING_HIDE_ACTIVITY"] != nil
     if env["ANGELING_EXPANDED"] != nil { controller.expanded = true }
+    controller.line = LineWatch.poll()
     controller.refresh()
     if env["ANGELING_HOVER"] != nil { controller.toggle.isHidden = false }
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }

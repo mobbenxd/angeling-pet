@@ -19,6 +19,10 @@ Angeling, a little pink angel from Ragnarok Online, floats in a corner of your s
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.
   - Optionally pops back out when a session needs you.
 - **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
+- **LINE notifications**: a green LINE row at the top of the bubble shows the total number of unread LINE messages and the latest message (sender, chat and time). Click it to open LINE. Right-click it to hide it until the next new message. While the bubble is hidden, a green badge on Angeling shows the unread total. Turn it off with **แจ้งเตือน LINE** in the menu.
+  - The unread total comes from LINE's Dock badge and needs no permission, but LINE must be running.
+  - The latest message is read from the macOS Notification Center database, which needs **Full Disk Access** for `~/Applications/Angeling.app` (System Settings → Privacy & Security → Full Disk Access). Without it, the row shows only the count. LINE notifications must be turned on, and message previews must be on to see the text.
+  - Angeling is ad-hoc signed, so you must grant Full Disk Access again after each rebuild or reinstall.
 - **Animations**: idle, running, reading, waiting, failed and waving, from the Codex pet sprite format. Drag Angeling and it runs along.
 - **Ragnarok emotes** (`/heh` `/lv` `/wah` `/omg` `/swt` `/slur`):
 
@@ -79,6 +83,7 @@ Claude Code hooks ──► hooks/angeling-hook.sh ──► ~/.claude/angeling-
   - where the session lives (desktop session id, terminal app, tty, or iTerm session id).
   
   Writes are locked per session, so parallel tool calls can't corrupt a file. It takes about 50–80 ms per event.
+- **LINE** is polled every 3 s, read-only: the Dock badge comes from `lsappinfo`, and the newest `jp.naver.line.mac` record comes from `~/Library/Group Containers/group.com.apple.usernoted/db2/db`.
 - **The app** is a single-file AppKit program. It uses no network, has no dependencies, and runs as an accessory app, so it has no Dock icon.
 
 ## Artwork
