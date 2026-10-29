@@ -1,25 +1,30 @@
 # การติดตั้ง
 
-## วิธีที่ 1: คำสั่งเดียว (แนะนำ)
+## วิธีที่ 1: คำสั่งเดียว (แนะนำ สำหรับทุกคน)
 
-1. เปิดแอป **Terminal** (กด ⌘Space แล้วพิมพ์ `Terminal`)
-2. วางคำสั่งนี้แล้วกด Enter:
+ใช้เวลาประมาณ 1 นาที ไม่ต้องลงโปรแกรมอื่นเพิ่ม ไม่ต้องใส่รหัสผ่าน
+
+### ขั้นที่ 1: เช็คเวอร์ชัน macOS
+
+คลิกเมนู  มุมซ้ายบน → **About This Mac** ต้องเป็น **macOS 13 (Ventura) ขึ้นไป** เช่น 13 Ventura, 14 Sonoma, 15 Sequoia หรือ 26 Tahoe
+
+### ขั้นที่ 2: เปิดแอป Terminal
+
+กด **⌘ + Space** พิมพ์ `Terminal` แล้วกด **Enter** จะได้หน้าต่างสีขาวหรือดำที่มีเคอร์เซอร์กะพริบ
+
+### ขั้นที่ 3: วางคำสั่งแล้วกด Enter
+
+ก็อปคำสั่งนี้ทั้งบรรทัด:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh | bash
 ```
 
-3. รอประมาณ 10 วินาที Angeling จะโผล่ที่มุมขวาล่างของจอ
+กลับไปที่ Terminal กด **⌘ + V** เพื่อวาง แล้วกด **Enter**
 
-ตัวติดตั้งจะดาวน์โหลดแอปที่ build ไว้แล้ว พร้อมภาพ Angeling, emote และเสียงเตือน ไม่ต้องลงโปรแกรมอื่นเพิ่ม
+### ขั้นที่ 4: รอจนขึ้น `Done!`
 
-ถ้าไม่อยากให้เปิดเองตอน login ให้ใช้:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh | bash -s -- --no-login
-```
-
-### สิ่งที่ควรเห็น
+ใช้เวลาประมาณ 10 วินาที หน้าจอจะขึ้นแบบนี้:
 
 ```
 ==> Downloading Angeling
@@ -29,13 +34,34 @@ curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh |
     installed the prebuilt app
 ==> Files (/Users/<you>/.claude/angeling-pet)
 ==> Claude Code
-    hook added to …            ← ถ้ามี Claude Code
-    not installed, so …        ← ถ้าไม่มี (ไม่เป็นไร การเตือนกับ LINE ยังใช้ได้)
+    not installed, so …        ← ถ้าไม่มี Claude Code (ไม่เป็นไร)
 ==> Start at login (…/local.angeling.pet.plist)
 ==> Launch
 
 Done! Angeling is in the bottom-right corner of your screen.
 ```
+
+**Angeling จะโผล่ที่มุมขวาล่างของจอ** และมีไอคอนหน้า Angeling ในแถบเมนูด้านบน ปิด Terminal ได้เลย
+
+### ขั้นที่ 5: ลองตั้งเตือนครั้งแรก
+
+1. กด **⌥ + ⌘ + R** (Option + Command + R)
+2. พิมพ์ว่าจะทำอะไร เลือกวันและเวลา แล้วกด **ตั้งเตือน**
+3. macOS จะถามขอสิทธิ์เข้าถึงปฏิทิน (ข้อความประมาณ *"Angeling" would like full access to your Calendar*) ให้กด **Allow Full Access** เพื่อให้บันทึกลงปฏิทินได้
+4. พอถึงเวลา Angeling จะส่งเสียง Level Up ของ Ragnarok และขึ้นแถวสีส้ม คลิกแถวเพื่อรับทราบ
+
+**เสร็จแล้ว** 🎉 ตั้งแต่นี้ Angeling จะเปิดเองทุกครั้งที่เปิดเครื่อง
+
+### ขั้นเพิ่มเติม (ทำเฉพาะที่ต้องการ)
+
+| อยากได้ | ทำอะไร |
+|---|---|
+| เห็นข้อความ LINE ล่าสุด | ให้สิทธิ์ Full Disk Access ตาม[แจ้งเตือน LINE](LINE-Notifications.md) (ถ้าไม่ให้ จะเห็นแค่จำนวนที่ยังไม่อ่าน) |
+| ให้รายงานงานของ Claude Code | ติดตั้ง Claude Code แล้วทำขั้นที่ 3 ซ้ำ |
+| ไม่ให้เปิดเองตอนเปิดเครื่อง | ใช้คำสั่ง `curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh \| bash -s -- --no-login` แทนในขั้นที่ 3 |
+| ซ่อน Angeling ชั่วคราว | กด **⌥ + ⌘ + A** |
+
+อัปเดตเป็นเวอร์ชันใหม่: ทำขั้นที่ 2–3 ซ้ำ ส่วนการถอนการติดตั้ง ดูที่[อัปเดตและถอนการติดตั้ง](Updating-and-Uninstalling.md)
 
 ## วิธีที่ 2: build จากซอร์สโค้ด
 

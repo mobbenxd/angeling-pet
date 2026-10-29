@@ -12,18 +12,26 @@ Claude Code is optional: reminders and LINE work without it.
 
 ## Quick start
 
-Paste this into **Terminal**:
+You need macOS 13 or later. No Xcode, git or Homebrew is needed.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh | bash
-```
+1. Open **Terminal**: press ⌘ Space, type `Terminal`, then press Enter.
+2. Paste this line and press Enter:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh | bash
+   ```
+3. Wait about 10 seconds for `Done!`. Angeling appears in the bottom-right corner and will start at every login.
+4. Press **⌥⌘R** to set your first reminder. Click **Allow Full Access** when macOS asks about Calendar.
 
-That's it. You need macOS 13 or later; no Xcode, git or Homebrew is needed. The installer downloads the ready-built app with Angeling's artwork and sounds. It sets Angeling to start at login and launches it in the bottom-right corner.
+Optional: grant Full Disk Access to see LINE message text ([guide](docs/LINE-Notifications.md)). If you use Claude Code, it's picked up automatically. **⌥⌘A** shows or hides Angeling, and right-clicking it opens the menu.
 
-- **⌥⌘R** set a reminder · **⌥⌘A** show or hide Angeling · right-click Angeling for the menu
-- Using Claude Code? Give it a task and watch the bubble.
+### ติดตั้ง (ภาษาไทย)
 
-> **ติดตั้งแบบเร็ว (ภาษาไทย):** เปิดแอป Terminal วางคำสั่งข้างบนแล้วกด Enter เสร็จแล้ว ไม่ต้องลงอะไรเพิ่ม (ต้องเป็น macOS 13 ขึ้นไป) คู่มือฉบับเต็มอยู่ที่ **[คู่มือ (docs/)](docs/README.md)**
+1. เปิดแอป **Terminal**: กด ⌘ Space พิมพ์ `Terminal` แล้วกด Enter
+2. วางคำสั่งข้างบน (บรรทัดที่ขึ้นต้นด้วย `curl`) แล้วกด Enter
+3. รอประมาณ 10 วินาทีจนขึ้น `Done!` Angeling จะโผล่ที่มุมขวาล่าง และเปิดเองทุกครั้งที่เปิดเครื่อง
+4. กด **⌥⌘R** เพื่อตั้งเตือน ถ้า macOS ถามเรื่องปฏิทิน ให้กด **Allow Full Access**
+
+ต้องเป็น macOS 13 ขึ้นไป ขั้นตอนแบบละเอียดพร้อมวิธีแก้ปัญหาอยู่ที่ **[คู่มือการติดตั้ง](docs/Installation.md)**
 
 ## Documentation
 
