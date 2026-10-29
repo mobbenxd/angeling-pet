@@ -1,0 +1,23 @@
+docs/Installation.md
+  s_dac10d5edeebbd::t_70000dc77c582b 50
+  s_dac10d5edeebbd::t_4beea93faf8be0 3,5,7-9,11,13,15-17,20,23-27,37,44-49,51-64
+  s_dac10d5edeebbd::t_8e4d2fc03eabb2 65
+README.md
+  s_dac10d5edeebbd::t_70000dc77c582b 15,17-23,25,27,29-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c8734d6ccc004fc563b11b92d3675fc464a9febf",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
