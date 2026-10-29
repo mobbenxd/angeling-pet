@@ -6,6 +6,30 @@ Angeling, a little pink angel from Ragnarok Online, floats in a corner of your s
 
 > เพ็ตลอยบนเดสก์ท็อป macOS ที่คอยรายงานสถานะงานของ Claude Code ทุก session (ทั้งแอป Claude desktop และ CLI) คลิกเพื่อไปที่ session นั้นได้ทันที
 
+## Quick start
+
+```bash
+git clone https://github.com/mobbenxd/angeling-pet.git ~/apps/angeling-pet
+cd ~/apps/angeling-pet
+./install.sh
+```
+
+Angeling appears in the bottom-right corner. Give Claude Code any task and watch the bubble. Press ⌥⌘A to show or hide Angeling.
+
+> **ติดตั้งแบบเร็ว (ภาษาไทย):** ต้องมี macOS 13+, `xcode-select --install`, `brew install jq` และเพ็ต Angeling ที่ติดตั้งใน Codex แล้ว จากนั้นรัน 3 บรรทัดข้างบน คู่มือฉบับเต็มอยู่ที่ **[Wiki](https://github.com/mobbenxd/angeling-pet/wiki)**
+
+## Documentation
+
+The full guide lives in the **[Wiki](https://github.com/mobbenxd/angeling-pet/wiki)** (in Thai). Its source is in [`docs/wiki/`](docs/wiki).
+
+| Getting started | Using Angeling | Maintenance and development |
+|---|---|---|
+| [Requirements](https://github.com/mobbenxd/angeling-pet/wiki/Requirements) | [Usage: clicks, menus, hotkey](https://github.com/mobbenxd/angeling-pet/wiki/Usage) | [Troubleshooting](https://github.com/mobbenxd/angeling-pet/wiki/Troubleshooting) |
+| [Installation](https://github.com/mobbenxd/angeling-pet/wiki/Installation) | [Activity bubble and statuses](https://github.com/mobbenxd/angeling-pet/wiki/Activity-Bubble) | [Updating and uninstalling](https://github.com/mobbenxd/angeling-pet/wiki/Updating-and-Uninstalling) |
+| [First run](https://github.com/mobbenxd/angeling-pet/wiki/First-Run) | [LINE notifications](https://github.com/mobbenxd/angeling-pet/wiki/LINE-Notifications) | [How it works](https://github.com/mobbenxd/angeling-pet/wiki/How-It-Works) |
+| | [Emotes and animations](https://github.com/mobbenxd/angeling-pet/wiki/Emotes-and-Animations) | [Development](https://github.com/mobbenxd/angeling-pet/wiki/Development) |
+| | [Use a different pet](https://github.com/mobbenxd/angeling-pet/wiki/Custom-Pet) | |
+
 ## Features
 
 - **Activity bubble**: one row per session, showing its status (กำลังทำ / รอคุณ / ติดปัญหา / เสร็จแล้ว), what it is doing right now, the prompt, and the task-list progress.
@@ -37,29 +61,31 @@ Angeling, a little pink angel from Ragnarok Online, floats in a corner of your s
 
 ## Requirements
 
-- macOS 13 or later
-- Xcode Command Line Tools (`swiftc`): `xcode-select --install`
-- `jq`: `brew install jq`
-- Claude Code
-- The **Angeling** pet installed in the Codex app, which puts its sprite sheet at `~/.codex/pets/angeling/spritesheet.webp`. Any Codex v2 sprite sheet works; see [Artwork](#artwork).
+| Need | Check | Install |
+|---|---|---|
+| macOS 13 or later | `sw_vers -productVersion` | |
+| Xcode Command Line Tools | `swiftc --version` | `xcode-select --install` |
+| jq | `jq --version` | `brew install jq` |
+| Claude Code | `ls ~/.claude` | <https://claude.com/claude-code> |
+| Angeling sprite sheet from Codex | `ls ~/.codex/pets/angeling/spritesheet.webp` | Install the Angeling pet in Codex, or see [Use a different pet](https://github.com/mobbenxd/angeling-pet/wiki/Custom-Pet) |
 
 ## Install
 
-```bash
-git clone https://github.com/mobbenxd/angeling-pet.git
-cd angeling-pet
-./install.sh
-```
-
-`install.sh` does the following:
+`install.sh` does the following. It is safe to run again.
 
 1. Fetches the artwork into `assets/`.
 2. Builds `~/Applications/Angeling.app`.
 3. Copies the hook and artwork to `~/.claude/angeling-pet/`.
-4. Adds the hook to `~/.claude/settings.json`. It is safe to run again, and it saves a backup to `settings.json.angeling-backup` first.
+4. Adds the hook to `~/.claude/settings.json`, keeping your other hooks. It saves a backup to `settings.json.angeling-backup` first.
 5. Sets Angeling to start at login. Pass `--no-login` to skip this.
 
-New Claude Code events are picked up immediately, with no restart needed.
+New Claude Code events are picked up immediately, with no restart needed. If something goes wrong, see [Troubleshooting](https://github.com/mobbenxd/angeling-pet/wiki/Troubleshooting).
+
+## Update
+
+```bash
+cd ~/apps/angeling-pet && git pull && ./install.sh
+```
 
 ## Uninstall
 
@@ -96,25 +122,16 @@ The artwork is **not** included in this repository. It belongs to its owners: Ra
 ## Development
 
 ```bash
-./scripts/build.sh            # rebuild ~/Applications/Angeling.app
+./scripts/build.sh                        # rebuild ~/Applications/Angeling.app
 pkill -x Angeling; open ~/Applications/Angeling.app
-
-# Render the widget to a PNG without screen-recording permission:
-ANGELING_SNAPSHOT=/tmp/a.png ANGELING_EXPANDED=1 ~/Applications/Angeling.app/Contents/MacOS/Angeling
-#   ANGELING_HIDE_ACTIVITY=1   bubble hidden
-#   ANGELING_HOVER=1           show the hover button
-#   ANGELING_EMOTE=lv          force an emote
+cp hooks/angeling-hook.sh ~/.claude/angeling-pet/hook.sh   # after editing the hook
 ```
 
-After editing the hook, copy it into place:
-
-```bash
-cp hooks/angeling-hook.sh ~/.claude/angeling-pet/hook.sh
-```
+Snapshot testing, the debug environment variables and hook tests are covered on the [Development](https://github.com/mobbenxd/angeling-pet/wiki/Development) wiki page.
 
 ## Contributing
 
-`main` is protected, so all changes go through pull requests. Fork the repository or create a branch, then open a PR.
+`main` is protected, so all changes go through pull requests. Fork the repository or create a branch, then open a PR. Documentation changes go in `docs/wiki/`, and maintainers publish them with `scripts/publish-wiki.sh` after merging.
 
 ## License
 
