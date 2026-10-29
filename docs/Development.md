@@ -8,9 +8,8 @@
 | `hooks/angeling-hook.sh` | hook ของ Claude Code |
 | `scripts/build.sh` | build `.app` |
 | `scripts/fetch-assets.sh` | ดึง sprite และ emote |
-| `scripts/publish-wiki.sh` | เผยแพร่ `docs/wiki/` ขึ้น GitHub Wiki |
 | `install.sh`, `uninstall.sh` | ติดตั้งและถอนการติดตั้ง |
-| `docs/wiki/` | ต้นฉบับของ Wiki นี้ |
+| `docs/` | คู่มือนี้ |
 
 ## Build และรัน
 
@@ -58,12 +57,9 @@ rm ~/.claude/angeling-pet/state/test.json
 3. แก้โค้ด แล้วทดสอบด้วย snapshot
 4. เปิด PR เข้า `main` พร้อมบอกว่าทดสอบอะไรไปแล้ว
 
-## แก้ Wiki
+## แก้คู่มือ
 
-Wiki นี้สร้างจากไฟล์ใน `docs/wiki/` ให้แก้ที่นั่นแล้วเปิด PR เมื่อ merge แล้ว ผู้ดูแลจะรัน:
+คู่มืออยู่ใน `docs/` ให้แก้แล้วเปิด PR เหมือนโค้ด ลิงก์ระหว่างหน้าให้ใช้ชื่อไฟล์แบบมี `.md` เช่น `[การติดตั้ง](Installation.md)` และถ้าเพิ่มหน้าใหม่ ให้เพิ่มลิงก์ใน `docs/README.md` ด้วย
 
-```bash
-./scripts/publish-wiki.sh
-```
-
-ลิงก์ระหว่างหน้าให้ใช้ชื่อไฟล์โดยไม่ต้องมี `.md` เช่น `[การติดตั้ง](Installation)`
+---
+[← สารบัญคู่มือ](README.md)

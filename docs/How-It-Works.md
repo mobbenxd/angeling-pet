@@ -51,7 +51,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 }
 ```
 
-`host`, `app`, `term`, `tty` และ `iterm` ใช้หาหน้าต่างตอนคลิก (ดู [วิธีใช้งาน](Usage#เปิด-session-ไปที่ไหน))
+`host`, `app`, `term`, `tty` และ `iterm` ใช้หาหน้าต่างตอนคลิก (ดู [วิธีใช้งาน](Usage.md#เปิด-session-ไปที่ไหน))
 
 ## ตัวแอป
 
@@ -63,3 +63,6 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 
 - จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app jp.naver.line.mac`
 - ข้อความล่าสุด: อ่าน record ล่าสุดของ `jp.naver.line.mac` จาก `~/Library/Group Containers/group.com.apple.usernoted/db2/db` (SQLite แบบอ่านอย่างเดียว ข้อมูลเป็น binary plist ใช้คีย์ `req.titl` / `req.subt` / `req.body`)
+
+---
+[← สารบัญคู่มือ](README.md)

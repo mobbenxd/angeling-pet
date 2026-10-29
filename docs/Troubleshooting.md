@@ -50,10 +50,10 @@ rm ~/.claude/angeling-pet/state/<session-id>.json
 | session ที่เริ่มก่อนติดตั้ง | ยังไม่รู้ว่าอยู่หน้าต่างไหน จะรู้หลังจาก session นั้นมีความเคลื่อนไหวครั้งถัดไป |
 
 ## ไม่มี emote
-รัน `./install.sh` ซ้ำเพื่อดาวน์โหลดใหม่ (ดู [Emote และท่าทาง](Emotes-and-Animations))
+รัน `./install.sh` ซ้ำเพื่อดาวน์โหลดใหม่ (ดู [Emote และท่าทาง](Emotes-and-Animations.md))
 
 ## LINE ไม่แสดง
-ดูตารางแก้ปัญหาในหน้า [แจ้งเตือน LINE](LINE-Notifications#แก้ปัญหา)
+ดูตารางแก้ปัญหาในหน้า [แจ้งเตือน LINE](LINE-Notifications.md#แก้ปัญหา)
 
 ## ทำ settings.json เสียหาย?
 ตัวติดตั้งสำรองไฟล์ไว้ให้เสมอ:
@@ -66,3 +66,6 @@ cp ~/.claude/settings.json.angeling-backup ~/.claude/settings.json
 ./uninstall.sh --purge
 ./install.sh
 ```
+
+---
+[← สารบัญคู่มือ](README.md)

@@ -1,6 +1,6 @@
 # การติดตั้ง
 
-> ก่อนเริ่ม ตรวจ [ความต้องการของระบบ](Requirements) ให้ครบ
+> ก่อนเริ่ม ตรวจ [ความต้องการของระบบ](Requirements.md) ให้ครบ
 
 ## 1. ดาวน์โหลด
 
@@ -9,7 +9,7 @@ git clone https://github.com/mobbenxd/angeling-pet.git ~/apps/angeling-pet
 cd ~/apps/angeling-pet
 ```
 
-จะเก็บไว้โฟลเดอร์ไหนก็ได้ แต่อย่าลบทิ้งหลังติดตั้ง เพราะต้องใช้ตอน [อัปเดต](Updating-and-Uninstalling)
+จะเก็บไว้โฟลเดอร์ไหนก็ได้ แต่อย่าลบทิ้งหลังติดตั้ง เพราะต้องใช้ตอน [อัปเดต](Updating-and-Uninstalling.md)
 
 ## 2. ติดตั้ง
 
@@ -56,7 +56,7 @@ Done. Angeling is in the bottom-right corner; ⌥⌘A shows/hides it.
 | `pgrep -x Angeling` | มีเลข process |
 | `grep -c angeling-pet/hook.sh ~/.claude/settings.json` | `11` |
 
-แล้วไปลองใช้งานจริงที่ **[เริ่มใช้งานครั้งแรก →](First-Run)**
+แล้วไปลองใช้งานจริงที่ **[เริ่มใช้งานครั้งแรก →](First-Run.md)**
 
 ## ติดตั้งไม่ผ่าน?
 
@@ -65,7 +65,10 @@ Done. Angeling is in the bottom-right corner; ⌥⌘A shows/hides it.
 | `Angeling runs on macOS only.` | ใช้ได้เฉพาะ macOS |
 | `swiftc not found` | `xcode-select --install` |
 | `jq not found` | `brew install jq` |
-| `Missing sprite sheet` | ติดตั้งเพ็ต Angeling ใน Codex หรือดู [เปลี่ยนเป็นเพ็ตตัวอื่น](Custom-Pet) |
+| `Missing sprite sheet` | ติดตั้งเพ็ต Angeling ใน Codex หรือดู [เปลี่ยนเป็นเพ็ตตัวอื่น](Custom-Pet.md) |
 | `Could not download emote` | ไม่เป็นไร ใช้งานได้ปกติ แค่ไม่มี emote รัน `./install.sh` ซ้ำภายหลังเพื่อลองโหลดใหม่ |
 
-ปัญหาอื่นดูที่ [แก้ปัญหา](Troubleshooting)
+ปัญหาอื่นดูที่ [แก้ปัญหา](Troubleshooting.md)
+
+---
+[← สารบัญคู่มือ](README.md)
