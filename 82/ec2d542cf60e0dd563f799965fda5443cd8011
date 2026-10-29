@@ -1,0 +1,37 @@
+docs/Installation.md
+  s_dac10d5edeebbd::t_502c2f03eb1782 43,69
+.gitignore
+  s_dac10d5edeebbd::t_779c8ca0e58a77 5-6
+scripts/fetch-assets.sh
+  s_dac10d5edeebbd::t_779c8ca0e58a77 6,10,39-45,48-51
+  s_dac10d5edeebbd::t_9060213f0331bb 46-47
+docs/How-It-Works.md
+  s_dac10d5edeebbd::t_502c2f03eb1782 18
+src/main.swift
+  s_dac10d5edeebbd::t_415a7a2645b909 603-607,741-745,880,882,884,1107-1108
+  s_dac10d5edeebbd::t_ac5d7428ac94f4 1109
+README.md
+  s_dac10d5edeebbd::t_502c2f03eb1782 47,124
+install.sh
+  s_dac10d5edeebbd::t_779c8ca0e58a77 27,32
+docs/Reminders.md
+  s_dac10d5edeebbd::t_502c2f03eb1782 22,49-53
+docs/Requirements.md
+  s_dac10d5edeebbd::t_a168d83b2be3b4 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82ec2d542cf60e0dd563f799965fda5443cd8011",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
