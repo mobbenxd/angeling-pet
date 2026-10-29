@@ -29,7 +29,7 @@
 
 ## ไม่มี emote?
 
-ไฟล์ emote อยู่ที่ `~/.claude/angeling-pet/emotes/` ถ้าตอนติดตั้งดาวน์โหลดไม่สำเร็จ (irowiki.org ล่มชั่วคราว) ให้รัน `./install.sh` ซ้ำ
+ไฟล์ emote อยู่ที่ `~/.claude/angeling-pet/emotes/` ถ้าตอนติดตั้งดาวน์โหลดไม่สำเร็จ (irowiki.org ล่มชั่วคราว) ให้[รันคำสั่งติดตั้งซ้ำ](Installation.md)
 
 ---
 [← สารบัญคู่มือ](README.md)

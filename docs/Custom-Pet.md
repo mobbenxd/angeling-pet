@@ -8,7 +8,7 @@ Angeling ใช้ sprite sheet แบบเดียวกับเพ็ตข
 ls ~/.codex/pets/                  # ดูชื่อเพ็ตที่มี
 cd ~/apps/angeling-pet
 rm assets/spritesheet.webp
-ANGELING_CODEX_PET=<ชื่อเพ็ต> ./install.sh
+ANGELING_CODEX_PET=<ชื่อเพ็ต> ./install.sh   # ต้องใช้วิธี build จากซอร์ส (git clone)
 ```
 
 ## ใช้ไฟล์ของคุณเอง

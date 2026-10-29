@@ -1,22 +1,29 @@
 # Angeling Pet
 
-A floating macOS desktop pet that reports what your [Claude Code](https://claude.com/claude-code) sessions are doing, in the spirit of the Codex desktop pet.
+A floating macOS desktop pet. Angeling, a little pink angel from Ragnarok Online, sits in a corner of your screen and:
 
-Angeling, a little pink angel from Ragnarok Online, floats in a corner of your screen. It keeps a list of your Claude Code sessions in a speech bubble: what each one is working on, which ones need your input, and which ones have finished. It also animates and pops Ragnarok emotes as things happen.
+- **reminds you** of things at the time you set (with the Ragnarok level-up sound) and puts them in your Calendar;
+- **shows your LINE unread count** and the latest message;
+- **reports your [Claude Code](https://claude.com/claude-code) sessions**, in the spirit of the Codex desktop pet: what each one is doing, which ones need you, and which ones have finished. Click to jump to a session.
 
-> เพ็ตลอยบนเดสก์ท็อป macOS ที่คอยรายงานสถานะงานของ Claude Code ทุก session (ทั้งแอป Claude desktop และ CLI) คลิกเพื่อไปที่ session นั้นได้ทันที
+Claude Code is optional: reminders and LINE work without it.
+
+> เพ็ตลอยบนเดสก์ท็อป macOS: ตั้งเตือนพร้อมบันทึกลงปฏิทิน, บอกข้อความ LINE ที่ยังไม่อ่าน และรายงานงานของ Claude Code (ไม่มี Claude ก็ใช้ได้)
 
 ## Quick start
 
+Paste this into **Terminal**:
+
 ```bash
-git clone https://github.com/mobbenxd/angeling-pet.git ~/apps/angeling-pet
-cd ~/apps/angeling-pet
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh | bash
 ```
 
-Angeling appears in the bottom-right corner. Give Claude Code any task and watch the bubble. Press ⌥⌘A to show or hide Angeling.
+That's it. You need macOS 13 or later; no Xcode, git or Homebrew is needed. The installer downloads the ready-built app with Angeling's artwork and sounds. It sets Angeling to start at login and launches it in the bottom-right corner.
 
-> **ติดตั้งแบบเร็ว (ภาษาไทย):** ต้องมี macOS 13+, `xcode-select --install`, `brew install jq` และเพ็ต Angeling ที่ติดตั้งใน Codex แล้ว จากนั้นรัน 3 บรรทัดข้างบน คู่มือฉบับเต็มอยู่ที่ **[คู่มือ (docs/)](docs/README.md)**
+- **⌥⌘R** set a reminder · **⌥⌘A** show or hide Angeling · right-click Angeling for the menu
+- Using Claude Code? Give it a task and watch the bubble.
+
+> **ติดตั้งแบบเร็ว (ภาษาไทย):** เปิดแอป Terminal วางคำสั่งข้างบนแล้วกด Enter เสร็จแล้ว ไม่ต้องลงอะไรเพิ่ม (ต้องเป็น macOS 13 ขึ้นไป) คู่มือฉบับเต็มอยู่ที่ **[คู่มือ (docs/)](docs/README.md)**
 
 ## Documentation
 
@@ -63,37 +70,42 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 
 ## Requirements
 
-| Need | Check | Install |
+| Need | For | Notes |
 |---|---|---|
-| macOS 13 or later | `sw_vers -productVersion` | |
-| Xcode Command Line Tools | `swiftc --version` | `xcode-select --install` |
-| jq | `jq --version` | `brew install jq` |
-| Claude Code | `ls ~/.claude` | <https://claude.com/claude-code> |
-| Angeling sprite sheet from Codex | `ls ~/.codex/pets/angeling/spritesheet.webp` | Install the Angeling pet in Codex, or see [Use a different pet](docs/Custom-Pet.md) |
+| macOS 13 or later | everything | Apple silicon or Intel |
+| [Claude Code](https://claude.com/claude-code) | session reports (optional) | Install it before Angeling, or run the installer again afterwards |
+| `jq` | session reports (optional) | Built into macOS 15+. On macOS 13–14: `brew install jq` |
+| LINE for Mac | LINE row (optional) | Full Disk Access shows the message text; see [LINE notifications](docs/LINE-Notifications.md) |
+| Xcode Command Line Tools | building from source only | `xcode-select --install` |
 
 ## Install
 
-`install.sh` does the following. It is safe to run again.
+The installer does the following. It is safe to run again.
 
-1. Fetches the artwork into `assets/`.
-2. Builds `~/Applications/Angeling.app`.
-3. Copies the hook and artwork to `~/.claude/angeling-pet/`.
-4. Adds the hook to `~/.claude/settings.json`, keeping your other hooks. It saves a backup to `settings.json.angeling-backup` first.
-5. Sets Angeling to start at login. Pass `--no-login` to skip this.
+1. Installs `~/Applications/Angeling.app`: the prebuilt universal app from the release, or a local build when run from a git clone.
+2. Copies the artwork, sounds and hook to `~/.claude/angeling-pet/`.
+3. If Claude Code is installed, adds the hook to `~/.claude/settings.json`, keeping your other hooks. It saves a backup to `settings.json.angeling-backup` first.
+4. Sets Angeling to start at login. Pass `--no-login` to skip this (`… | bash -s -- --no-login`).
 
-New Claude Code events are picked up immediately, with no restart needed. If something goes wrong, see [Troubleshooting](docs/Troubleshooting.md).
+### From source
+
+```bash
+git clone https://github.com/mobbenxd/angeling-pet.git ~/apps/angeling-pet
+cd ~/apps/angeling-pet
+./install.sh
+```
+
+This builds the app with `swiftc` and takes the artwork from the latest release. If you have the Codex `angeling` pet, it uses that instead; `ANGELING_CODEX_PET=<name>` picks another Codex pet. If something goes wrong, see [Troubleshooting](docs/Troubleshooting.md).
 
 ## Update
 
-```bash
-cd ~/apps/angeling-pet && git pull && ./install.sh
-```
+Run the Quick start command again. From a git clone, use `git pull && ./install.sh`.
 
 ## Uninstall
 
 ```bash
-./uninstall.sh           # remove app, login item and hooks
-./uninstall.sh --purge   # also delete ~/.claude/angeling-pet and preferences
+~/.claude/angeling-pet/uninstall.sh           # remove app, login item and hooks
+~/.claude/angeling-pet/uninstall.sh --purge   # also delete ~/.claude/angeling-pet, reminders and preferences
 ```
 
 ## How it works
@@ -117,11 +129,13 @@ Claude Code hooks ──► hooks/angeling-hook.sh ──► ~/.claude/angeling-
 
 ## Artwork
 
-The artwork is **not** included in this repository. It belongs to its owners: Ragnarok Online and Angeling are © Gravity Co., Ltd., and the sprite sheet comes from your own Codex pet. `scripts/fetch-assets.sh` fetches a personal copy:
+Ragnarok Online, Angeling, the emotes and the level-up sound are © Gravity Co., Ltd. They are **not** covered by the MIT license and are not in the git history. They are published as assets of each [GitHub Release](https://github.com/mobbenxd/angeling-pet/releases) so that installs work out of the box, and they will be removed if the rights holder asks.
 
-- **Sprite sheet**: copied from `~/.codex/pets/$ANGELING_CODEX_PET/spritesheet.webp` (default `angeling`). You can also drop any Codex v2 sheet at `assets/spritesheet.webp`: 1536×2288 pixels, 8 columns × 11 rows of 192×208 frames. The rows are idle, running-right, running-left, waving, jumping, failed, waiting, running, review, and two look-around rows.
-- **Emotes**: downloaded from the [iRO Wiki emote list](https://irowiki.org/wiki/Emotes).
-- **Reminder chime**: the Ragnarok Online level-up sound, downloaded from [MyInstants](https://www.myinstants.com/en/instant/level-up-ragnarok/) to `assets/sounds/levelup.mp3`. If the download fails, reminders use a macOS sound.
+`scripts/fetch-assets.sh` fills `assets/` from, in order:
+
+- **Sprite sheet**: your Codex pet `~/.codex/pets/${ANGELING_CODEX_PET:-angeling}`, if present; otherwise the release. You can also drop any Codex v2 sheet at `assets/spritesheet.webp`. See [Use a different pet](docs/Custom-Pet.md).
+- **Emotes**: the release; otherwise the [iRO Wiki emote list](https://irowiki.org/wiki/Emotes).
+- **Reminder chime**: the release; otherwise [MyInstants](https://www.myinstants.com/en/instant/level-up-ragnarok/). If neither works, reminders use a macOS sound.
 
 ## Development
 
@@ -129,9 +143,10 @@ The artwork is **not** included in this repository. It belongs to its owners: Ra
 ./scripts/build.sh                        # rebuild ~/Applications/Angeling.app
 pkill -x Angeling; open ~/Applications/Angeling.app
 cp hooks/angeling-hook.sh ~/.claude/angeling-pet/hook.sh   # after editing the hook
+./scripts/package.sh 1.2.3                # release files into dist/
 ```
 
-Snapshot testing, the debug environment variables and hook tests are covered on the [Development](docs/Development.md) guide.
+Snapshot testing, the debug environment variables, hook tests and the release steps are covered in the [Development](docs/Development.md) guide.
 
 ## Contributing
 

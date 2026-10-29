@@ -15,16 +15,24 @@
    ```bash
    ~/Applications/Angeling.app/Contents/MacOS/Angeling
    ```
-   ถ้าขึ้น `Cannot load spritesheet.webp` ให้รัน `./install.sh` ใหม่
+   ถ้าขึ้น `Cannot load spritesheet.webp` ให้[รันคำสั่งติดตั้งซ้ำ](Installation.md)
+
+## เปิดแอปไม่ได้ (Apple could not verify)
+
+Angeling ไม่ได้เซ็นด้วยใบรับรองของ Apple ถ้าดาวน์โหลด zip ผ่าน browser แล้วเปิดเอง macOS จะบล็อก
+
+- **ทางที่ง่ายที่สุด:** ติดตั้งด้วย[คำสั่งเดียว](Installation.md) ซึ่งไม่โดนบล็อก
+- หรือเปิด System Settings → Privacy & Security เลื่อนลงไปจะเจอ "Angeling was blocked…" แล้วกด **Open Anyway**
 
 ## ไม่เปิดเองตอน login
 ```bash
 launchctl print gui/$(id -u)/local.angeling.pet | head -3
 ```
-ถ้าหาไม่เจอ ให้รัน `./install.sh` ใหม่ (อย่าใส่ `--no-login`) และเช็คว่า System Settings → General → Login Items ไม่ได้ปิด `local.angeling.pet` ไว้
+ถ้าหาไม่เจอ ให้[รันคำสั่งติดตั้งซ้ำ](Installation.md) (อย่าใส่ `--no-login`) และเช็คว่า System Settings → General → Login Items ไม่ได้ปิด `local.angeling.pet` ไว้
 
 ## บับเบิลไม่มีงานขึ้นเลย
 
+0. ต้องมี Claude Code ก่อนติดตั้ง Angeling ถ้าติดตั้ง Claude ทีหลัง ให้[รันคำสั่งติดตั้งซ้ำ](Installation.md)
 1. เช็คว่ามี hook ครบ: `grep -c angeling-pet/hook.sh ~/.claude/settings.json` ต้องได้ `11`
 2. เช็คว่า hook เขียนไฟล์ได้: สั่งงาน Claude แล้วดู `ls -lt ~/.claude/angeling-pet/state/` ต้องมีไฟล์ที่เพิ่งอัปเดต
 3. เช็คว่ามี `jq`: `jq --version` (hook หาที่ `/opt/homebrew/bin/jq` ก่อน แล้วค่อยหาใน PATH)
@@ -50,7 +58,7 @@ rm ~/.claude/angeling-pet/state/<session-id>.json
 | session ที่เริ่มก่อนติดตั้ง | ยังไม่รู้ว่าอยู่หน้าต่างไหน จะรู้หลังจาก session นั้นมีความเคลื่อนไหวครั้งถัดไป |
 
 ## ไม่มี emote
-รัน `./install.sh` ซ้ำเพื่อดาวน์โหลดใหม่ (ดู [Emote และท่าทาง](Emotes-and-Animations.md))
+[รันคำสั่งติดตั้งซ้ำ](Installation.md)เพื่อดาวน์โหลดใหม่ (ดู [Emote และท่าทาง](Emotes-and-Animations.md))
 
 ## LINE ไม่แสดง
 ดูตารางแก้ปัญหาในหน้า [แจ้งเตือน LINE](LINE-Notifications.md#แก้ปัญหา)
@@ -63,8 +71,8 @@ cp ~/.claude/settings.json.angeling-backup ~/.claude/settings.json
 
 ## เริ่มใหม่หมด
 ```bash
-./uninstall.sh --purge
-./install.sh
+~/.claude/angeling-pet/uninstall.sh --purge
+curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh | bash
 ```
 
 ---

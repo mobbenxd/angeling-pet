@@ -9,6 +9,8 @@
 | `scripts/build.sh` | build `.app` |
 | `scripts/fetch-assets.sh` | ดึง sprite และ emote |
 | `install.sh`, `uninstall.sh` | ติดตั้งและถอนการติดตั้ง |
+| `get.sh` | ตัวติดตั้งแบบคำสั่งเดียว (ดาวน์โหลด `Angeling.zip` จาก Release ล่าสุด) |
+| `scripts/package.sh` | สร้างไฟล์สำหรับ Release |
 | `docs/` | คู่มือนี้ |
 
 ## Build และรัน
@@ -49,6 +51,40 @@ printf '%s' '{"hook_event_name":"UserPromptSubmit","session_id":"test","cwd":"/t
 cat ~/.claude/angeling-pet/state/test.json
 rm ~/.claude/angeling-pet/state/test.json
 ```
+
+## ออก Release
+
+ผู้ใช้ทั่วไปติดตั้งจาก Release ล่าสุด จึงต้องออก Release ใหม่ทุกครั้งที่อยากให้คนอื่นได้ของใหม่
+
+```bash
+git switch main && git pull
+./scripts/package.sh 1.2.3                       # → dist/
+gh release create v1.2.3 dist/* --title "Angeling 1.2.3" --notes "…"
+```
+
+`dist/` มี:
+
+| ไฟล์ | ใช้ทำอะไร |
+|---|---|
+| `Angeling.zip` | ชุดติดตั้งที่ `get.sh` ดาวน์โหลด: แอป universal (Apple silicon + Intel) ภาพ เสียง และสคริปต์ |
+| `spritesheet.webp`, `emote-*.gif`, `levelup.mp3` | ภาพและเสียงแยกไฟล์ สำหรับคนที่ติดตั้งจาก git clone |
+
+ทุก Release ต้องแนบไฟล์ครบทุกตัว เพราะ `get.sh` และ `fetch-assets.sh` ดึงจาก `releases/latest`
+
+ทดสอบตัวติดตั้งกับไฟล์ในเครื่อง โดยไม่ยุ่งกับการติดตั้งจริง:
+
+```bash
+env -i HOME=/tmp/fakehome PATH=/usr/bin:/bin:/usr/sbin:/sbin ANGELING_NO_LAUNCH=1 \
+  ANGELING_BUNDLE_URL="file://$PWD/dist/Angeling.zip" bash get.sh --no-login
+```
+
+(คำสั่งนี้จะปิด Angeling ตัวจริงที่เปิดอยู่ด้วย ทดสอบเสร็จแล้วต้องเปิดใหม่)
+
+| ตัวแปร | ผล |
+|---|---|
+| `ANGELING_BUNDLE_URL` | ที่อยู่ของ `Angeling.zip` สำหรับ `get.sh` |
+| `ANGELING_RELEASE_URL` | ที่อยู่ของไฟล์ภาพและเสียงสำหรับ `fetch-assets.sh` |
+| `ANGELING_NO_LAUNCH=1` | ติดตั้งโดยไม่เปิดแอป |
 
 ## ร่วมพัฒนา
 
