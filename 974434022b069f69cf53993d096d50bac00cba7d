@@ -1,0 +1,38 @@
+src/main.swift
+  s_ccf9e5a67c3bd1::t_1b351eaaff4c7e 753-754
+  s_ccf9e5a67c3bd1::t_c7875f0898387b 1768-1769,1772-1778,1782-1783,1793-1794,1797
+  s_ccf9e5a67c3bd1::t_a29aeea8496b11 1169-1172,1174,1306-1309,1311,1322-1324,1823-1824,1826,1840-1842,1844
+  s_ccf9e5a67c3bd1::t_ec20b32d7d1901 850-858
+  s_ccf9e5a67c3bd1::t_075cf1449fa717 1008-1020,1491-1496,1546-1550,1578
+  s_ccf9e5a67c3bd1::t_31dc7d0ecbbdcf 792,797,799-800
+  s_ccf9e5a67c3bd1::t_2363c05c6cc890 866
+  s_ccf9e5a67c3bd1::t_e21ae2ab3fb63a 1262-1300
+  s_ccf9e5a67c3bd1::t_12c0107d86450e 738-744
+  s_ccf9e5a67c3bd1::t_0685992d0e3613 139-208
+CLAUDE.md
+  s_ccf9e5a67c3bd1::t_58d502980ca602 35
+README.md
+  s_ccf9e5a67c3bd1::t_19a111f96237ce 63
+docs/Activity-Bubble.md
+  s_ccf9e5a67c3bd1::t_24dbf932cf8607 31-44
+docs/Development.md
+  s_ccf9e5a67c3bd1::t_9fba9050fe8dd9 49
+docs/Usage.md
+  s_ccf9e5a67c3bd1::t_af587114fadace 64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "974434022b069f69cf53993d096d50bac00cba7d",
+  "prompts": {},
+  "sessions": {
+    "s_ccf9e5a67c3bd1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92c9e74c-0308-41da-bcf4-2bfec558a08b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "vasit <n_vasit@hotmail.com>"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+docs/Activity-Bubble.md
+  s_ccf9e5a67c3bd1::t_9bd5c90dab0828 29-30
+hooks/angeling-hook.sh
+  s_ccf9e5a67c3bd1::t_2a3efb292ffd82 92
+  s_ccf9e5a67c3bd1::t_58874367f2a980 89-91,93-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "c6f978de9b699d271012704962234c237d188796",
+  "prompts": {},
+  "sessions": {
+    "s_ccf9e5a67c3bd1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92c9e74c-0308-41da-bcf4-2bfec558a08b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "vasit <n_vasit@hotmail.com>"
+    }
+  }
+}

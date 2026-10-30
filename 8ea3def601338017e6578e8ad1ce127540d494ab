@@ -1,0 +1,32 @@
+docs/Activity-Bubble.md
+  s_ccf9e5a67c3bd1::t_9bd5c90dab0828 31-32
+hooks/angeling-hook.sh
+  s_ccf9e5a67c3bd1::t_2a3efb292ffd82 92
+  s_ccf9e5a67c3bd1::t_58874367f2a980 89-91,93-96
+docs/Development.md
+  s_ccf9e5a67c3bd1::t_c0fe32d4ccada3 49
+docs/Usage.md
+  s_ccf9e5a67c3bd1::t_c0fe32d4ccada3 64
+src/main.swift
+  s_ccf9e5a67c3bd1::t_c0fe32d4ccada3 139-208,738-744,753-754,792,797,799-800,850-858,866,1008-1020,1169-1172,1174,1262-1300,1306-1309,1311,1322-1324,1491-1496,1546-1550,1578,1768-1769,1772-1778,1782-1783,1793-1794,1797,1823-1824,1826,1840-1842,1844
+CLAUDE.md
+  s_ccf9e5a67c3bd1::t_c0fe32d4ccada3 35
+README.md
+  s_ccf9e5a67c3bd1::t_c0fe32d4ccada3 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "8ea3def601338017e6578e8ad1ce127540d494ab",
+  "prompts": {},
+  "sessions": {
+    "s_ccf9e5a67c3bd1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92c9e74c-0308-41da-bcf4-2bfec558a08b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "vasit <n_vasit@hotmail.com>"
+    }
+  }
+}
