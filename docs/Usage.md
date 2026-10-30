@@ -24,10 +24,21 @@
 | แอป Claude desktop | เปิด session นั้นตรงๆ (ผ่าน deep link) |
 | Terminal.app | เลือกแท็บของ session นั้น |
 | iTerm2 | เลือก session นั้น |
+| kitty | เลือกหน้าต่างของ session นั้น (ต้องเปิด remote control ดูด้านล่าง) |
+| herdr | สลับ herdr ไปที่ pane ของ session นั้น แล้วเรียก terminal ที่เปิด herdr อยู่ขึ้นมา |
 | VS Code / Cursor / Windsurf | เปิดหน้าต่างของโฟลเดอร์นั้น |
 | อื่นๆ | เรียกแอปนั้นขึ้นมา |
 
 ครั้งแรกที่สลับแท็บใน Terminal หรือ iTerm macOS อาจถามว่า Angeling ควบคุมแอปนั้นได้ไหม (Automation) ให้กด **OK**
+
+ถ้าจะให้ kitty เลือกหน้าต่างได้ถูก (รวมถึงกรณีที่รัน herdr อยู่ใน kitty) ให้เพิ่ม 2 บรรทัดนี้ใน `~/.config/kitty/kitty.conf` แล้วปิดและเปิด kitty ใหม่ ถ้าไม่ได้เพิ่ม Angeling จะเรียก kitty ขึ้นมาได้ แต่ไม่ได้เลือกหน้าต่างให้
+
+```
+allow_remote_control socket-only
+listen_on unix:/tmp/kitty-{kitty_pid}
+```
+
+เมื่อเปิดแล้ว โปรแกรมไหนก็ตามที่รันในเครื่องด้วย user ของคุณจะสั่งงาน kitty ผ่าน socket นี้ได้
 
 ## คีย์ลัด
 

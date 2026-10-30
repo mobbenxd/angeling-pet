@@ -55,7 +55,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Click to jump**:
   - Click a row to open that session.
   - Click Angeling to open the latest active session.
-  - Works for the Claude desktop app (via deep link), Terminal and iTerm2 (selects the right tab), and VS Code, Cursor and Windsurf (focuses the window for that folder).
+  - Works for the Claude desktop app (via deep link), Terminal and iTerm2 (selects the right tab), kitty (selects the right window), [herdr](https://herdr.dev) (switches to the pane, then raises the terminal showing it), and VS Code, Cursor and Windsurf (focuses the window for that folder).
 - **Hide**:
   - Hover Angeling to reveal a button that hides or shows the bubble. A red badge shows the number of active sessions while it is hidden.
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.
@@ -129,7 +129,7 @@ Claude Code hooks ──► hooks/angeling-hook.sh ──► ~/.claude/angeling-
 - **The hook** runs for `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `PermissionRequest`, `Stop`, `StopFailure`, `SubagentStop` and `SessionEnd`. It writes one small JSON file per session, recording:
   - the state, the current activity and the prompt;
   - the task list, read from the Claude desktop task list tool;
-  - where the session lives (desktop session id, terminal app, tty, or iTerm session id).
+  - where the session lives (desktop session id, terminal app, tty, iTerm session id, kitty window id, or herdr pane id).
   
   Writes are locked per session, so parallel tool calls can't corrupt a file. It takes about 50–80 ms per event.
 - **Reminders** are stored in `~/.claude/angeling-pet/reminders.json` and linked to their Calendar events through EventKit.
