@@ -818,14 +818,28 @@ final class BubbleView: NSView {
         return NSSize(width: width, height: h)
     }
 
+    /// One outline with the tail built into the bottom edge: a separate tail shape leaves the
+    /// body's edge drawn across its base and a darker seam where the translucent fills overlap.
+    private func outline(_ body: NSRect, radius r: CGFloat, tailHalf w: CGFloat) -> NSBezierPath {
+        let mid = bounds.midX
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: body.minX + r, y: body.minY))
+        path.line(to: NSPoint(x: mid - w, y: body.minY))
+        path.line(to: NSPoint(x: mid, y: 1))
+        path.line(to: NSPoint(x: mid + w, y: body.minY))
+        path.appendArc(from: NSPoint(x: body.maxX, y: body.minY), to: NSPoint(x: body.maxX, y: body.maxY), radius: r)
+        path.appendArc(from: NSPoint(x: body.maxX, y: body.maxY), to: NSPoint(x: body.minX, y: body.maxY), radius: r)
+        path.appendArc(from: NSPoint(x: body.minX, y: body.maxY), to: NSPoint(x: body.minX, y: body.minY), radius: r)
+        path.appendArc(from: NSPoint(x: body.minX, y: body.minY), to: NSPoint(x: mid, y: body.minY), radius: r)
+        path.close()
+        path.lineJoinStyle = .round
+        return path
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let body = NSRect(x: 1, y: tail, width: bounds.width - 2, height: bounds.height - tail - 1)
         if theme.ragnarok { drawRagnarokWindow(body); return }
-        let path = NSBezierPath(roundedRect: body, xRadius: theme.minimal ? 14 : 12, yRadius: theme.minimal ? 14 : 12)
-        let mid = bounds.midX
-        path.move(to: NSPoint(x: mid - 8, y: tail + 0.5))
-        path.line(to: NSPoint(x: mid, y: 1))
-        path.line(to: NSPoint(x: mid + 8, y: tail + 0.5))
+        let path = outline(body, radius: theme.minimal ? 14 : 12, tailHalf: 8)
         theme.bubbleFill.setFill()
         path.fill()
         theme.bubbleStroke.setStroke()
@@ -835,11 +849,7 @@ final class BubbleView: NSView {
 
     /// Grey window with a blue gradient title bar and a white list box, as in Ragnarok Online.
     private func drawRagnarokWindow(_ body: NSRect) {
-        let path = NSBezierPath(roundedRect: body, xRadius: 4, yRadius: 4)
-        let mid = bounds.midX
-        path.move(to: NSPoint(x: mid - 7, y: tail + 0.5))
-        path.line(to: NSPoint(x: mid, y: 1))
-        path.line(to: NSPoint(x: mid + 7, y: tail + 0.5))
+        let path = outline(body, radius: 4, tailHalf: 7)
         theme.bubbleFill.setFill()
         path.fill()
 
