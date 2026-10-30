@@ -46,6 +46,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_UPDATE_CMD="…"` | คำสั่งที่ใช้แทน `get.sh` ตอนอัปเดต |
 | `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
 | `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
+| `ANGELING_THEME=dark` | ใช้ธีมนี้ (`classic`, `light`, `dark`, `tokyo`, `auto`) |
 | `ANGELING_STATE_DIR=/path` | อ่านไฟล์ session จำลองจากโฟลเดอร์นี้แทนของจริง |
 
 ## ทดสอบ hook

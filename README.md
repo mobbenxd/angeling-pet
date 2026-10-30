@@ -60,6 +60,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
   - Hover Angeling to reveal a button that hides or shows the bubble. A red badge shows the number of active sessions while it is hidden.
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.
   - Pops back out when a session needs you (can be turned off).
+- **Themes**: Classic (the pink bubble), Minimal light, Minimal dark, Tokyo Night, or follow macOS light / dark. Pick one from the ธีม menu.
 - **Needs you now**: when Claude asks for permission or asks you something, the row turns red with a slow pulse and moves to the top. Angeling gets a red "!" badge and plays a short sound (can be muted).
 - **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
 - **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).

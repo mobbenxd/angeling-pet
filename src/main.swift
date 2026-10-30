@@ -136,6 +136,76 @@ let alarmOrange = NSColor(calibratedRed: 0.93, green: 0.48, blue: 0.08, alpha: 1
 let alertRed = NSColor(calibratedRed: 0.86, green: 0.15, blue: 0.2, alpha: 1)
 let discordBlurple = NSColor(calibratedRed: 0.35, green: 0.4, blue: 0.95, alpha: 1)
 let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
+
+// MARK: - Themes
+//   Classic is the original pink bubble. The minimal themes drop emoji and framed rows: a coloured
+//   dot marks each row's state, the status sits on the right, and only rows that need you are tinted.
+
+func hex(_ v: UInt32, _ a: CGFloat = 1) -> NSColor {
+    NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a)
+}
+
+struct Theme {
+    let id: String
+    let minimal: Bool
+    let bubbleFill: NSColor, bubbleStroke: NSColor
+    let text: NSColor, secondary: NSColor, project: NSColor, hover: NSColor
+    let running: NSColor, done: NSColor, alert: NSColor, alarm: NSColor, gold: NSColor, line: NSColor, discord: NSColor
+
+    static let classic = Theme(
+        id: "classic", minimal: false,
+        bubbleFill: NSColor(calibratedRed: 1, green: 0.98, blue: 0.97, alpha: 0.97),
+        bubbleStroke: NSColor(calibratedRed: 0.86, green: 0.55, blue: 0.6, alpha: 1),
+        text: NSColor(calibratedWhite: 0.15, alpha: 1), secondary: NSColor(calibratedWhite: 0.45, alpha: 1),
+        project: NSColor(calibratedRed: 0.72, green: 0.3, blue: 0.4, alpha: 1),
+        hover: NSColor(calibratedRed: 1, green: 0.85, blue: 0.88, alpha: 0.7),
+        running: NSColor(calibratedWhite: 0.45, alpha: 1), done: NSColor(calibratedRed: 0.2, green: 0.62, blue: 0.33, alpha: 1),
+        alert: alertRed, alarm: alarmOrange, gold: NSColor(calibratedRed: 0.8, green: 0.55, blue: 0.05, alpha: 1),
+        line: lineGreen, discord: discordBlurple)
+    static let light = Theme(
+        id: "light", minimal: true, bubbleFill: hex(0xffffff, 0.97), bubbleStroke: hex(0x000000, 0.1),
+        text: hex(0x1d1d1f), secondary: hex(0x6e6e73), project: hex(0x1d1d1f), hover: hex(0x000000, 0.05),
+        running: hex(0x0a72e0), done: hex(0x1f8a4c), alert: hex(0xd93036), alarm: hex(0xc8650a), gold: hex(0xa66a10),
+        line: hex(0x06a84d), discord: hex(0x5865f2))
+    static let dark = Theme(
+        id: "dark", minimal: true, bubbleFill: hex(0x1c1c1e, 0.96), bubbleStroke: hex(0xffffff, 0.12),
+        text: hex(0xf5f5f7), secondary: hex(0xa1a1a6), project: hex(0xf5f5f7), hover: hex(0xffffff, 0.07),
+        running: hex(0x3b9eff), done: hex(0x3dd68c), alert: hex(0xff6369), alarm: hex(0xffa94d), gold: hex(0xf5c451),
+        line: hex(0x3ddc84), discord: hex(0x8b93ff))
+    static let tokyoNight = Theme(
+        id: "tokyo", minimal: true, bubbleFill: hex(0x1a1b26, 0.97), bubbleStroke: hex(0x292e42),
+        text: hex(0xc0caf5), secondary: hex(0xa9b1d6), project: hex(0xc0caf5), hover: hex(0x292e42),
+        running: hex(0x7aa2f7), done: hex(0x9ece6a), alert: hex(0xf7768e), alarm: hex(0xff9e64), gold: hex(0xe0af68),
+        line: hex(0x73daca), discord: hex(0xbb9af7))
+
+    /// Menu choices in order: (setting value, menu title). "auto" follows macOS light / dark.
+    static let choices = [("auto", "ตามระบบ (Minimal สว่าง / มืด)"), ("light", "Minimal สว่าง"), ("dark", "Minimal มืด"),
+                          ("tokyo", "Tokyo Night"), ("classic", "Classic (ชมพู)")]
+
+    static func named(_ id: String) -> Theme {
+        switch id {
+        case "light": return light
+        case "dark": return dark
+        case "tokyo": return tokyoNight
+        case "auto":
+            return NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        default: return classic
+        }
+    }
+
+    /// Colour of a session state: the dot in minimal themes.
+    func color(_ state: String) -> NSColor {
+        switch state {
+        case "waiting": return alert
+        case "failed": return alarm
+        case "done": return done
+        case "running", "review": return running
+        default: return secondary
+        }
+    }
+}
+
+var theme = Theme.classic
 let clockTime: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
 let icons: [String: String] = ["waiting": "⚠️", "failed": "😣", "running": "⚙️", "review": "🔍", "done": "✨", "idle": "💤"]
 let statusLabel: [String: String] = ["waiting": "ต้องดูตอนนี้", "failed": "ติดปัญหา", "running": "กำลังทำ",
@@ -665,7 +735,13 @@ final class RowView: NSView {
         if let a = accent {
             // 0…1 on a 1.6 s cycle while pulsing; steady otherwise.
             let p = pulse ? (1 - cos(Date().timeIntervalSinceReferenceDate * 2 * .pi / 1.6)) / 2 : 1
-            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.25, dy: 1.25), xRadius: 8, yRadius: 8)
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.25, dy: 1.25), xRadius: theme.minimal ? 10 : 8, yRadius: theme.minimal ? 10 : 8)
+            if theme.minimal {
+                // A tint only, no frame.
+                a.withAlphaComponent((hovering ? 0.2 : 0.13) + (pulse ? 0.1 * p : 0)).setFill()
+                path.fill()
+                return
+            }
             a.withAlphaComponent((hovering ? 0.22 : 0.1) + (pulse ? 0.08 * p : 0)).setFill()
             path.fill()
             a.withAlphaComponent(pulse ? 0.35 + 0.65 * p : 1).setStroke()
@@ -674,8 +750,8 @@ final class RowView: NSView {
             return
         }
         guard hovering else { return }
-        NSColor(calibratedRed: 1, green: 0.85, blue: 0.88, alpha: 0.7).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
+        theme.hover.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: theme.minimal ? 10 : 8, yRadius: theme.minimal ? 10 : 8).fill()
     }
     override func mouseEntered(with e: NSEvent) { hovering = true; NSCursor.pointingHand.set() }
     override func mouseExited(with e: NSEvent) { hovering = false; NSCursor.arrow.set() }
@@ -713,15 +789,15 @@ final class BubbleView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let body = NSRect(x: 1, y: tail, width: bounds.width - 2, height: bounds.height - tail - 1)
-        let path = NSBezierPath(roundedRect: body, xRadius: 12, yRadius: 12)
+        let path = NSBezierPath(roundedRect: body, xRadius: theme.minimal ? 14 : 12, yRadius: theme.minimal ? 14 : 12)
         let mid = bounds.midX
         path.move(to: NSPoint(x: mid - 8, y: tail + 0.5))
         path.line(to: NSPoint(x: mid, y: 1))
         path.line(to: NSPoint(x: mid + 8, y: tail + 0.5))
-        NSColor(calibratedRed: 1, green: 0.98, blue: 0.97, alpha: 0.97).setFill()
+        theme.bubbleFill.setFill()
         path.fill()
-        NSColor(calibratedRed: 0.86, green: 0.55, blue: 0.6, alpha: 1).setStroke()
-        path.lineWidth = 1.5
+        theme.bubbleStroke.setStroke()
+        path.lineWidth = theme.minimal ? 1 : 1.5
         path.stroke()
     }
 }
@@ -771,9 +847,15 @@ final class ToggleButton: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 1, dy: 1)
         let path = NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2)
-        NSColor(calibratedRed: 1, green: hovering ? 0.9 : 0.97, blue: hovering ? 0.92 : 0.96, alpha: 0.95).setFill()
-        path.fill()
-        NSColor(calibratedRed: 0.86, green: 0.55, blue: 0.6, alpha: 1).setStroke()
+        if theme.minimal {
+            theme.bubbleFill.setFill()
+            path.fill()
+            if hovering { theme.hover.setFill(); path.fill() }
+        } else {
+            NSColor(calibratedRed: 1, green: hovering ? 0.9 : 0.97, blue: hovering ? 0.92 : 0.96, alpha: 0.95).setFill()
+            path.fill()
+        }
+        theme.bubbleStroke.setStroke()
         path.lineWidth = 1.2
         path.stroke()
         let name = shown ? "eye.slash" : "text.bubble"
@@ -781,7 +863,7 @@ final class ToggleButton: NSView {
             .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold)) {
             let tinted = NSImage(size: img.size, flipped: false) { rect in
                 img.draw(in: rect)
-                NSColor(calibratedRed: 0.72, green: 0.3, blue: 0.4, alpha: 1).set()
+                (theme.minimal ? theme.secondary : theme.project).set()
                 rect.fill(using: .sourceAtop)
                 return true
             }
@@ -923,6 +1005,19 @@ final class PetController: NSObject, NSMenuDelegate {
     var petHidden: Bool { get { d.bool(forKey: "petHidden") } set { d.set(newValue, forKey: "petHidden") } }
     var popWhenWaiting: Bool { get { d.object(forKey: "popWhenWaiting") as? Bool ?? true } set { d.set(newValue, forKey: "popWhenWaiting") } }
     var waitSound: Bool { flag("waitSound") }
+    var themeChoice: String { ProcessInfo.processInfo.environment["ANGELING_THEME"] ?? d.string(forKey: "theme") ?? "classic" }
+
+    /// Switch to the chosen theme ("auto" follows macOS light / dark, so this runs every refresh).
+    func applyTheme() {
+        let t = Theme.named(themeChoice)
+        guard t.id != theme.id else { return }
+        theme = t
+        badge.color = t.minimal ? t.alert : NSColor(calibratedRed: 0.9, green: 0.25, blue: 0.35, alpha: 1)
+        lineBadge.color = t.line
+        discordBadge.color = t.discord
+        [badge, lineBadge, discordBadge, toggle, bubble].forEach { $0.needsDisplay = true }
+        lastRowsSig = ""   // rebuild the rows in the new colours
+    }
 
     init(sheet: SpriteSheet) {
         self.sheet = sheet
@@ -1071,13 +1166,12 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     func updateRow(width w: CGFloat) -> RowView {
-        let gold = NSColor(calibratedRed: 0.8, green: 0.55, blue: 0.05, alpha: 1)
-        let t = NSMutableAttributedString(string: updating ? "🎁 กำลังอัปเดตเป็น \(latestVersion ?? "")…" : "🎁 มี Angeling เวอร์ชันใหม่ \(latestVersion ?? "")",
-                                          attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: gold])
-        t.append(NSAttributedString(string: "  (ตอนนี้ \(Updater.current))\n" + (updating ? "Angeling จะปิดแล้วเปิดใหม่เองในไม่กี่วินาที" : "คลิกเพื่ออัปเดต · คลิกขวาสำหรับตัวเลือก"),
-                                    attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)]))
+        let t = rowHeader(icon: "🎁", title: updating ? "กำลังอัปเดตเป็น \(latestVersion ?? "")…" : "มี Angeling เวอร์ชันใหม่ \(latestVersion ?? "")",
+                          titleColor: theme.gold, dot: theme.gold, status: "ตอนนี้ \(Updater.current)", statusColor: theme.secondary, width: w)
+        t.append(rowLine(updating ? "Angeling จะปิดแล้วเปิดใหม่เองในไม่กี่วินาที" : "คลิกเพื่ออัปเดต · คลิกขวาสำหรับตัวเลือก",
+                         size: 11, color: theme.secondary))
         let r = RowView(text: t, width: w, clickable: !updating)
-        r.accent = gold
+        r.accent = theme.gold
         guard !updating else { return r }
         r.onClick = { [weak self] in self?.runUpdate() }
         r.onRightClick = { [weak self] e in
@@ -1165,21 +1259,56 @@ final class PetController: NSObject, NSMenuDelegate {
         return m
     }
 
+    // MARK: themed row text
+
+    /// A row's first line. Minimal themes: "● title ⇥ status" with the status right-aligned;
+    /// Classic: "icon title  status".
+    func rowHeader(icon: String, title: String, titleColor: NSColor, dot: NSColor, status: String, statusColor: NSColor,
+                   statusBold: Bool = false, width: CGFloat) -> NSMutableAttributedString {
+        let out = NSMutableAttributedString()
+        let statusFont = statusBold ? NSFont.boldSystemFont(ofSize: 11) : NSFont.systemFont(ofSize: 11)
+        if theme.minimal {
+            out.append(NSAttributedString(string: dotPrefix, attributes: [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: dot, .baselineOffset: 1]))
+            out.append(NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: theme.text]))
+            if !status.isEmpty { out.append(NSAttributedString(string: "\t" + status, attributes: [.font: statusFont, .foregroundColor: statusColor])) }
+            let para = NSMutableParagraphStyle()
+            para.tabStops = [NSTextTab(textAlignment: .right, location: width - 22)]
+            out.addAttribute(.paragraphStyle, value: para, range: NSRange(location: 0, length: out.length))
+        } else {
+            out.append(NSAttributedString(string: "\(icon) \(title)", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: titleColor]))
+            if !status.isEmpty { out.append(NSAttributedString(string: "  " + status, attributes: [.font: statusFont, .foregroundColor: statusColor])) }
+        }
+        return out
+    }
+
+    let dotPrefix = "●  "
+    /// Width of the dot and its gap, so minimal themes line later lines up under the title.
+    lazy var dotIndent: CGFloat = ceil(NSAttributedString(string: dotPrefix, attributes: [.font: NSFont.systemFont(ofSize: 9)]).size().width)
+
+    /// One more line of a row, under its header.
+    func rowLine(_ text: String, size: CGFloat = 12, color: NSColor? = nil, bold: Bool = false) -> NSAttributedString {
+        var a: [NSAttributedString.Key: Any] = [.font: bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size),
+                                                .foregroundColor: color ?? theme.text]
+        if theme.minimal {
+            let para = NSMutableParagraphStyle()
+            para.firstLineHeadIndent = dotIndent
+            para.headIndent = dotIndent
+            a[.paragraphStyle] = para
+        }
+        return NSAttributedString(string: "\n" + text, attributes: a)
+    }
+
     /// Ringing reminders (orange, stay until handled) and ones due within 15 minutes.
     func reminderRows(width w: CGFloat, ringingOnly: Bool = false) -> [RowView] {
         let now = Date().timeIntervalSince1970
-        let bold = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: alarmOrange]
-        let big = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 13), .foregroundColor: NSColor(calibratedWhite: 0.12, alpha: 1)]
-        let normal = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 1)]
-        let dim = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)]
         var rows: [RowView] = []
         for r in ringing(now) {
-            let t = NSMutableAttributedString(string: "⏰ ถึงเวลาแล้ว!", attributes: bold)
-            t.append(NSAttributedString(string: "  " + reminderWhen(r.date), attributes: dim))
-            t.append(NSAttributedString(string: "\n" + r.title, attributes: big))
-            t.append(NSAttributedString(string: "\nคลิกเมื่อทำแล้ว · คลิกขวาเพื่อเลื่อน", attributes: dim))
+            let t = rowHeader(icon: "⏰", title: "ถึงเวลาแล้ว!", titleColor: theme.alarm, dot: theme.alarm,
+                              status: reminderWhen(r.date), statusColor: theme.secondary, width: w)
+            t.append(rowLine(r.title, size: 13, bold: true))
+            t.append(rowLine("คลิกเมื่อทำแล้ว · คลิกขวาเพื่อเลื่อน", size: 11, color: theme.secondary))
             let row = RowView(text: t, width: w, clickable: true)
-            row.accent = alarmOrange
+            row.accent = theme.alarm
             row.onClick = { [weak self] in self?.reminderDone(id: r.id) }
             row.onRightClick = { [weak self] e in
                 guard let self else { return }
@@ -1190,9 +1319,9 @@ final class PetController: NSObject, NSMenuDelegate {
         guard !ringingOnly else { return rows }
         for r in upcoming(now) {
             let mins = Int(ceil((r.alertAt - now) / 60))
-            let t = NSMutableAttributedString(string: "⏰ อีก \(mins) นาที", attributes: bold)
-            t.append(NSAttributedString(string: "  " + reminderWhen(r.alertAt), attributes: dim))
-            t.append(NSAttributedString(string: "\n" + r.title, attributes: normal))
+            let t = rowHeader(icon: "⏰", title: "อีก \(mins) นาที", titleColor: theme.alarm, dot: theme.alarm,
+                              status: reminderWhen(r.alertAt), statusColor: theme.secondary, width: w)
+            t.append(rowLine(r.title))
             let row = RowView(text: t, width: w, clickable: true)
             row.toolTip = "คลิกขวาเพื่อลบการเตือน"
             row.onRightClick = { [weak self] e in
@@ -1359,6 +1488,12 @@ final class PetController: NSObject, NSMenuDelegate {
             i.target = self; i.representedObject = key; i.state = flag(key) ? .on : .off
         }
         m.addItem(withTitle: "แสดงในบับเบิล", action: nil, keyEquivalent: "").submenu = opts
+        let themes = NSMenu()
+        for (id, title) in Theme.choices {
+            let i = themes.addItem(withTitle: title, action: #selector(setTheme(_:)), keyEquivalent: "")
+            i.target = self; i.representedObject = id; i.state = themeChoice == id ? .on : .off
+        }
+        m.addItem(withTitle: "ธีม", action: nil, keyEquivalent: "").submenu = themes
         item("โผล่ออกมาเมื่อมีงานที่ต้องดู", #selector(togglePop), on: popWhenWaiting)
         item("เสียงเตือนเมื่อมีงานที่ต้องดู", #selector(toggleWaitSound), on: waitSound)
         item("แจ้งเตือน LINE", #selector(toggleLine), on: showLine)
@@ -1408,6 +1543,11 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
     @objc func togglePop() { popWhenWaiting.toggle(); refresh() }
+    @objc func setTheme(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        d.set(id, forKey: "theme")
+        refresh()
+    }
     @objc func toggleWaitSound() { d.set(!waitSound, forKey: "waitSound") }
     @objc func toggleLine() { d.set(!showLine, forKey: "showLine"); lineDismissed = nil; pollLine(); refresh() }
     @objc func openLine() { setOverride("waving", for: 0.8); LineWatch.open() }
@@ -1435,6 +1575,7 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     func refresh() {
+        applyTheme()
         let now = Date().timeIntervalSince1970
         let previouslyWaiting = Set(sessions.filter { $0.1 == "waiting" }.compactMap { $0.0.session })
         sessions = loadSessions().map { ($0, effective($0, now: now)) }
@@ -1624,31 +1765,22 @@ final class PetController: NSObject, NSMenuDelegate {
 
     func makeRows(_ live: [(SessionState, String)], urgentOnly: Bool = false) -> [RowView] {
         let w = winWidth - bubble.pad * 2
-        let green = NSColor(calibratedRed: 0.2, green: 0.62, blue: 0.33, alpha: 1)
-        let bold = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11),
-                    .foregroundColor: NSColor(calibratedRed: 0.72, green: 0.3, blue: 0.4, alpha: 1)]
-        let normal = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 12),
-                      .foregroundColor: NSColor(calibratedWhite: 0.15, alpha: 1)]
-        let dim = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 11),
-                   .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)]
-
-        let doneLabel = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: green]
-        let alertLabel = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: alertRed]
+        let normal = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 12), .foregroundColor: theme.text]
+        let dim = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: 11), .foregroundColor: theme.secondary]
 
         func rowText(_ s: SessionState, _ st: String, detailed: Bool) -> NSAttributedString {
-            let out = NSMutableAttributedString()
-            func add(_ t: String, _ a: [NSAttributedString.Key: Any]) { out.append(NSAttributedString(string: t, attributes: a)) }
-            add("\(icons[st] ?? "") \(s.project ?? "?")", bold)
-            add("  \(statusLabel[st] ?? "")", st == "done" ? doneLabel : st == "waiting" ? alertLabel : dim)
-            if let plan = s.plan, !plan.isEmpty {
-                add(" · \(plan.filter { $0.s == "completed" }.count)/\(plan.count)", dim)
-            }
-            if detailed && showTask, let t = s.task, !t.isEmpty { add("\nงาน: \(t)", dim) }
-            if showText, let t = s.text, !t.isEmpty { add("\n" + t, normal) }
+            var status = statusLabel[st] ?? ""
+            if let plan = s.plan, !plan.isEmpty { status += " · \(plan.filter { $0.s == "completed" }.count)/\(plan.count)" }
+            let statusColor = ["waiting", "done"].contains(st) || (theme.minimal && st == "failed") ? theme.color(st) : theme.secondary
+            let out = rowHeader(icon: icons[st] ?? "", title: s.project ?? "?", titleColor: theme.project, dot: theme.color(st),
+                                status: status, statusColor: statusColor, statusBold: ["waiting", "done"].contains(st), width: w)
+            if detailed && showTask, let t = s.task, !t.isEmpty { out.append(rowLine("งาน: \(t)", size: 11, color: theme.secondary)) }
+            if showText, let t = s.text, !t.isEmpty { out.append(rowLine(t)) }
             if detailed && showPlan, let plan = s.plan, !plan.isEmpty {
                 for p in plan {
                     let mark = p.s == "completed" ? "✓" : (p.s == "in_progress" ? "▸" : "○")
-                    add("\n  \(mark) \(p.c)", p.s == "in_progress" ? normal : dim)
+                    out.append(rowLine("  \(mark) \(p.c)", size: p.s == "in_progress" ? 12 : 11,
+                                       color: p.s == "in_progress" ? theme.text : theme.secondary))
                 }
             }
             return out
@@ -1658,10 +1790,11 @@ final class PetController: NSObject, NSMenuDelegate {
             let r = RowView(text: rowText(s, st, detailed: detailed), width: w, clickable: true)
             r.toolTip = "คลิกเพื่อไปที่ session นี้ · คลิกขวาเพื่อซ่อนแถวนี้"
             if st == "done" {
-                r.accent = green
+                // Minimal themes mark a finished row with its green dot alone.
+                if !theme.minimal { r.accent = theme.done }
                 r.onClick = { [weak self] in self?.openSession(s); self?.dismiss(s) }
             } else if st == "waiting" {
-                r.accent = alertRed
+                r.accent = theme.alert
                 r.pulse = true
                 r.toolTip = "Claude รอคุณอยู่ คลิกเพื่อไปตอบ"
                 r.onClick = { [weak self] in self?.openSession(s) }
@@ -1687,10 +1820,10 @@ final class PetController: NSObject, NSMenuDelegate {
         }
 
         func lineRow() -> RowView {
-            let out = NSMutableAttributedString(string: "💬 LINE", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: lineGreen])
-            out.append(NSAttributedString(string: "  ยังไม่อ่าน \(lineUnread) ข้อความ", attributes: dim))
+            let out = rowHeader(icon: "💬", title: "LINE", titleColor: theme.line, dot: theme.line,
+                                status: "ยังไม่อ่าน \(lineUnread) ข้อความ", statusColor: theme.secondary, width: w)
             let r = RowView(text: out, width: w, clickable: true)
-            r.accent = lineGreen
+            r.accent = theme.line
             r.toolTip = "คลิกเพื่อเปิด LINE · คลิกขวาเพื่อซ่อน"
             r.onClick = { [weak self] in self?.openLine() }
             r.onRightClick = { [weak self] e in
@@ -1704,10 +1837,11 @@ final class PetController: NSObject, NSMenuDelegate {
             return r
         }
         func discordRow() -> RowView {
-            let out = NSMutableAttributedString(string: "🎮 Discord", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: discordBlurple])
-            out.append(NSAttributedString(string: "  ยังไม่อ่าน \(discordUnread) ข้อความ (DM / @mention)", attributes: dim))
+            let out = rowHeader(icon: "🎮", title: "Discord", titleColor: theme.discord, dot: theme.discord,
+                                status: "ยังไม่อ่าน \(discordUnread) ข้อความ", statusColor: theme.secondary, width: w)
+            if !theme.minimal { out.append(NSAttributedString(string: " (DM / @mention)", attributes: dim)) }
             let r = RowView(text: out, width: w, clickable: true)
-            r.accent = discordBlurple
+            r.accent = theme.discord
             r.toolTip = "คลิกเพื่อเปิด Discord · คลิกขวาเพื่อซ่อน"
             r.onClick = { [weak self] in self?.openDiscord() }
             r.onRightClick = { [weak self] e in
