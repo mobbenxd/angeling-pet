@@ -140,6 +140,8 @@ let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
 // MARK: - Themes
 //   Classic is the original pink bubble. The minimal themes drop emoji and framed rows: a coloured
 //   dot marks each row's state, the status sits on the right, and only rows that need you are tinted.
+//   Ragnarok draws the bubble as a Ragnarok Online window: blue title bar, grey body, white list box,
+//   flat rows with a light-blue highlight and a coloured bar on rows that need you.
 
 func hex(_ v: UInt32, _ a: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: CGFloat(v >> 16 & 0xff) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: a)
@@ -177,16 +179,24 @@ struct Theme {
         text: hex(0xc0caf5), secondary: hex(0xa9b1d6), project: hex(0xc0caf5), hover: hex(0x292e42),
         running: hex(0x7aa2f7), done: hex(0x9ece6a), alert: hex(0xf7768e), alarm: hex(0xff9e64), gold: hex(0xe0af68),
         line: hex(0x73daca), discord: hex(0xbb9af7))
+    static let ragnarok = Theme(
+        id: "ragnarok", minimal: false, bubbleFill: hex(0xf6f6f6), bubbleStroke: hex(0x7d8494),
+        text: hex(0x000000), secondary: hex(0x5a5a5a), project: hex(0x000000), hover: hex(0xc9d9fb),
+        running: hex(0x5f6066), done: hex(0x2c8a3a), alert: hex(0xd1262e), alarm: hex(0xd8730c), gold: hex(0xb07c08),
+        line: hex(0x06a84d), discord: hex(0x5865f2))
+
+    var ragnarok: Bool { id == "ragnarok" }
 
     /// Menu choices in order: (setting value, menu title). "auto" follows macOS light / dark.
     static let choices = [("auto", "ตามระบบ (Minimal สว่าง / มืด)"), ("light", "Minimal สว่าง"), ("dark", "Minimal มืด"),
-                          ("tokyo", "Tokyo Night"), ("classic", "Classic (ชมพู)")]
+                          ("tokyo", "Tokyo Night"), ("ragnarok", "Ragnarok"), ("classic", "Classic (ชมพู)")]
 
     static func named(_ id: String) -> Theme {
         switch id {
         case "light": return light
         case "dark": return dark
         case "tokyo": return tokyoNight
+        case "ragnarok": return ragnarok
         case "auto":
             return NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         default: return classic
@@ -691,6 +701,15 @@ final class ReminderForm: NSObject {
 
 // MARK: - Activity rows + bubble
 
+/// Pointer for clickable things: the Ragnarok cursor in the Ragnarok theme, a pointing hand otherwise.
+/// Returns whether it took the Ragnarok cursor, so the exit releases the same one even if the theme changed.
+func pointerEntered() -> Bool {
+    if theme.ragnarok { ROCursor.enter(); return true }
+    NSCursor.pointingHand.set()
+    return false
+}
+func pointerExited(_ ro: Bool) { if ro { ROCursor.exit() } else { NSCursor.arrow.set() } }
+
 final class RowView: NSView {
     let label = NSTextField(wrappingLabelWithString: "")
     var onClick: (() -> Void)?
@@ -735,6 +754,14 @@ final class RowView: NSView {
         if let a = accent {
             // 0…1 on a 1.6 s cycle while pulsing; steady otherwise.
             let p = pulse ? (1 - cos(Date().timeIntervalSinceReferenceDate * 2 * .pi / 1.6)) / 2 : 1
+            if theme.ragnarok {
+                // Flat tint with a bar on the left, like a selected line in a Ragnarok list.
+                (hovering ? theme.hover : a.withAlphaComponent(0.12 + (pulse ? 0.1 * p : 0))).setFill()
+                bounds.fill()
+                a.withAlphaComponent(pulse ? 0.45 + 0.55 * p : 1).setFill()
+                NSRect(x: 0, y: 0, width: 3, height: bounds.height).fill()
+                return
+            }
             let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.25, dy: 1.25), xRadius: theme.minimal ? 10 : 8, yRadius: theme.minimal ? 10 : 8)
             if theme.minimal {
                 // A tint only, no frame.
@@ -751,10 +778,12 @@ final class RowView: NSView {
         }
         guard hovering else { return }
         theme.hover.setFill()
+        if theme.ragnarok { bounds.fill(); return }
         NSBezierPath(roundedRect: bounds, xRadius: theme.minimal ? 10 : 8, yRadius: theme.minimal ? 10 : 8).fill()
     }
-    override func mouseEntered(with e: NSEvent) { hovering = true; NSCursor.pointingHand.set() }
-    override func mouseExited(with e: NSEvent) { hovering = false; NSCursor.arrow.set() }
+    override func mouseEntered(with e: NSEvent) { hovering = true; roCursor = pointerEntered() }
+    override func mouseExited(with e: NSEvent) { hovering = false; pointerExited(roCursor) }
+    private var roCursor = false
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with e: NSEvent) {}
     override func mouseUp(with e: NSEvent) {
@@ -770,14 +799,16 @@ final class BubbleView: NSView {
     override func mouseUp(with e: NSEvent) { onClick?() }
     let tail: CGFloat = 9
     let pad: CGFloat = 6
+    /// Ragnarok's window title bar sits above the rows.
+    var titleBar: CGFloat { theme.ragnarok ? 18 : 0 }
 
     /// Lays the rows out top-to-bottom and returns the bubble size.
     func set(rows: [RowView], width: CGFloat) -> NSSize {
         subviews.forEach { $0.removeFromSuperview() }
         let gap: CGFloat = 4
         let inner = rows.reduce(0) { $0 + $1.frame.height } + gap * CGFloat(max(0, rows.count - 1))
-        let h = inner + pad * 2 + tail
-        var y = h - pad
+        let h = inner + pad * 2 + tail + titleBar
+        var y = h - titleBar - pad
         for r in rows {
             y -= r.frame.height
             r.frame.origin = NSPoint(x: pad, y: y)
@@ -789,6 +820,7 @@ final class BubbleView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let body = NSRect(x: 1, y: tail, width: bounds.width - 2, height: bounds.height - tail - 1)
+        if theme.ragnarok { drawRagnarokWindow(body); return }
         let path = NSBezierPath(roundedRect: body, xRadius: theme.minimal ? 14 : 12, yRadius: theme.minimal ? 14 : 12)
         let mid = bounds.midX
         path.move(to: NSPoint(x: mid - 8, y: tail + 0.5))
@@ -798,6 +830,53 @@ final class BubbleView: NSView {
         path.fill()
         theme.bubbleStroke.setStroke()
         path.lineWidth = theme.minimal ? 1 : 1.5
+        path.stroke()
+    }
+
+    /// Grey window with a blue gradient title bar and a white list box, as in Ragnarok Online.
+    private func drawRagnarokWindow(_ body: NSRect) {
+        let path = NSBezierPath(roundedRect: body, xRadius: 4, yRadius: 4)
+        let mid = bounds.midX
+        path.move(to: NSPoint(x: mid - 7, y: tail + 0.5))
+        path.line(to: NSPoint(x: mid, y: 1))
+        path.line(to: NSPoint(x: mid + 7, y: tail + 0.5))
+        theme.bubbleFill.setFill()
+        path.fill()
+
+        let bar = NSRect(x: body.minX, y: body.maxY - titleBar, width: body.width, height: titleBar)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: body, xRadius: 4, yRadius: 4).addClip()
+        NSGradient(colors: [hex(0xb4c3dc), hex(0xa9c4ec), hex(0x8296c6), hex(0x93a3d0), hex(0xb9c6e2)])?.draw(in: bar, angle: 90)
+        hex(0x8d9ab8).setFill()
+        NSRect(x: bar.minX, y: bar.minY, width: bar.width, height: 1).fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        // Round badge at the left of the title, then the title in white with a dark outline.
+        let dot = NSRect(x: bar.minX + 5, y: bar.midY - 4.5, width: 9, height: 9)
+        hex(0xf4f6fb).setFill()
+        NSBezierPath(ovalIn: dot).fill()
+        hex(0x4a5d86).setStroke()
+        let ring = NSBezierPath(ovalIn: dot.insetBy(dx: 0.5, dy: 0.5))
+        ring.lineWidth = 1
+        ring.stroke()
+        hex(0x6c86bd).setFill()
+        NSBezierPath(ovalIn: dot.insetBy(dx: 3, dy: 3)).fill()
+        let font = NSFont.boldSystemFont(ofSize: 11)
+        let shade = NSAttributedString(string: "Angeling", attributes: [.font: font, .foregroundColor: hex(0x26324d)])
+        let title = NSAttributedString(string: "Angeling", attributes: [.font: font, .foregroundColor: NSColor.white])
+        let at = NSPoint(x: dot.maxX + 5, y: bar.midY - title.size().height / 2)
+        shade.draw(at: NSPoint(x: at.x + 1, y: at.y - 1))
+        title.draw(at: at)
+
+        // White list box behind the rows.
+        let list = NSRect(x: body.minX + 3, y: body.minY + 3, width: body.width - 6, height: body.height - titleBar - 6)
+        NSColor.white.setFill()
+        list.fill()
+        hex(0xc8c8c8).setStroke()
+        NSBezierPath(rect: list.insetBy(dx: 0.5, dy: 0.5)).stroke()
+
+        theme.bubbleStroke.setStroke()
+        path.lineWidth = 1
         path.stroke()
     }
 }
@@ -841,13 +920,14 @@ final class ToggleButton: NSView {
     override func mouseUp(with e: NSEvent) {
         if bounds.contains(convert(e.locationInWindow, from: nil)) { onClick?() }
     }
-    override func mouseEntered(with e: NSEvent) { hovering = true; NSCursor.pointingHand.set(); onHover?(true) }
-    override func mouseExited(with e: NSEvent) { hovering = false; NSCursor.arrow.set(); onHover?(false) }
+    override func mouseEntered(with e: NSEvent) { hovering = true; roCursor = pointerEntered(); onHover?(true) }
+    override func mouseExited(with e: NSEvent) { hovering = false; pointerExited(roCursor); onHover?(false) }
+    private var roCursor = false
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 1, dy: 1)
         let path = NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2)
-        if theme.minimal {
+        if theme.id != "classic" {
             theme.bubbleFill.setFill()
             path.fill()
             if hovering { theme.hover.setFill(); path.fill() }
@@ -894,6 +974,107 @@ final class BadgeView: NSView {
 
 // MARK: - Pet view (click / drag)
 
+/// Ragnarok Online-style pointer: a folded blue arrowhead that spins about its left edge (tip to bottom).
+/// Each frame is a shaded 3D render, drawn here rather than shipped as artwork, so nothing © Gravity is needed.
+enum ROCursor {
+    static let frames: [NSCursor] = (0..<16).map { cursor(angle: CGFloat($0) / 16 * 2 * .pi) }
+    private static var frame = 0
+
+    private struct V { var x, y, z: CGFloat }
+    private static func cross(_ a: V, _ b: V) -> V { V(x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x) }
+    private static func dot(_ a: V, _ b: V) -> CGFloat { a.x * b.x + a.y * b.y + a.z * b.z }
+
+    /// Face colour from how much light it catches: navy in shadow, blue, then white.
+    private static func shade(_ b: CGFloat) -> NSColor {
+        let stops: [(CGFloat, NSColor)] = [(0, hex(0x2b3f6b)), (0.3, hex(0x4f6aa0)), (0.5, hex(0x678bc6)), (0.68, hex(0xa9bfe6)), (0.8, hex(0xffffff))]
+        guard let hi = stops.firstIndex(where: { $0.0 >= b }) else { return stops.last!.1 }
+        guard hi > 0 else { return stops[0].1 }
+        let (b0, c0) = stops[hi - 1], (b1, c1) = stops[hi]
+        return c0.blended(withFraction: (b - b0) / (b1 - b0), of: c1) ?? c1
+    }
+
+    private static func cursor(angle: CGFloat) -> NSCursor {
+        // Top-left-origin canvas; the spin axis runs from the tip down to the bottom point, so the
+        // canvas is wide enough for the arrowhead to swing to either side of it.
+        let size = NSSize(width: 52, height: 34), origin = NSPoint(x: 26, y: 2)
+        // At angle 0 this is the in-game pose: blue face tip-right-notch, white sliver tip-notch-bottom.
+        let bottom = V(x: 1, y: 29, z: 0), right = V(x: 23, y: 20, z: 0), notch = V(x: 7, y: 21, z: 6)
+        let len = sqrt(dot(bottom, bottom)), axis = V(x: bottom.x / len, y: bottom.y / len, z: 0)
+        func spin(_ v: V) -> V {   // Rodrigues' rotation about the axis through the tip
+            let c = cos(angle), s = sin(angle), k = cross(axis, v), d = dot(axis, v) * (1 - c)
+            return V(x: v.x * c + k.x * s + axis.x * d, y: v.y * c + k.y * s + axis.y * d, z: v.z * c + k.z * s + axis.z * d)
+        }
+        let tip = V(x: 0, y: 0, z: 0), r = spin(right), n = spin(notch)
+        func pt(_ v: V) -> NSPoint { NSPoint(x: origin.x + v.x, y: origin.y + v.y) }
+        let light = { (v: V) -> V in let l = sqrt(dot(v, v)); return V(x: v.x / l, y: v.y / l, z: v.z / l) }(V(x: -0.55, y: -0.35, z: 0.75))
+        // Both faces are two-sided; draw the farther one first. The big face stays blue and the
+        // sliver stays pale, as in the game, so each keeps its own band of the shading ramp.
+        let faces = [([tip, r, n], CGFloat(0), CGFloat(0.6)), ([tip, n, bottom], CGFloat(0.45), CGFloat(1))]
+            .sorted { ($0.0[1].z + $0.0[2].z) < ($1.0[1].z + $1.0[2].z) }
+
+        let img = NSImage(size: size, flipped: true) { _ in
+            let outline = NSBezierPath()
+            outline.move(to: pt(tip)); outline.line(to: pt(r)); outline.line(to: pt(n)); outline.line(to: pt(bottom))
+            outline.close()
+            outline.lineJoinStyle = .miter
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
+            shadow.shadowOffset = NSSize(width: 1, height: -1)
+            shadow.shadowBlurRadius = 1
+            shadow.set()
+            hex(0x111a26).setFill()
+            outline.fill()
+            NSGraphicsContext.restoreGraphicsState()
+            for (f, lo, hi) in faces {
+                var nv = cross(V(x: f[1].x - f[0].x, y: f[1].y - f[0].y, z: f[1].z - f[0].z),
+                               V(x: f[2].x - f[0].x, y: f[2].y - f[0].y, z: f[2].z - f[0].z))
+                let l = sqrt(dot(nv, nv))
+                guard l > 0.01 else { continue }
+                nv = V(x: nv.x / l, y: nv.y / l, z: nv.z / l)
+                if nv.z < 0 { nv = V(x: -nv.x, y: -nv.y, z: -nv.z) }
+                let p = NSBezierPath()
+                p.move(to: pt(f[0])); p.line(to: pt(f[1])); p.line(to: pt(f[2])); p.close()
+                // Faces turned edge-on to the viewer go dark, so a thin sliver never reads as a hole.
+                shade(lo + (hi - lo) * max(0, min(1, dot(nv, light) * (0.35 + 0.65 * nv.z)))).setFill()
+                p.fill()
+            }
+            hex(0x111a26).setStroke()
+            outline.lineWidth = 1.1
+            outline.stroke()
+            return true
+        }
+        return NSCursor(image: img, hotSpot: origin)
+    }
+
+    private static var timer: Timer?
+    private static var holders = 0
+
+    /// Callers pair enter / exit; the arrow comes back once nothing holds the cursor.
+    static func enter() {
+        holders += 1
+        frames[frame].set()
+        guard timer == nil else { return }
+        // Each tick shows the next frame, which also wins back the cursor if something else reset it.
+        let t = Timer(timeInterval: 0.07, repeats: true) { _ in
+            // A view removed while hovered never gets its exit; let go once the pointer leaves our windows.
+            let p = NSEvent.mouseLocation
+            guard NSApp.windows.contains(where: { $0.isVisible && $0.frame.contains(p) }) else { holders = 1; ROCursor.exit(); return }
+            frame = (frame + 1) % frames.count
+            frames[frame].set()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+    static func exit() {
+        holders = max(0, holders - 1)
+        guard holders == 0 else { return }
+        timer?.invalidate()
+        timer = nil
+        NSCursor.arrow.set()
+    }
+}
+
 final class PetView: NSImageView {
     var onClick: (() -> Void)?
     var onHover: ((Bool) -> Void)?
@@ -903,8 +1084,8 @@ final class PetView: NSImageView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
     }
-    override func mouseEntered(with e: NSEvent) { onHover?(true) }
-    override func mouseExited(with e: NSEvent) { onHover?(false) }
+    override func mouseEntered(with e: NSEvent) { ROCursor.enter(); onHover?(true) }
+    override func mouseExited(with e: NSEvent) { ROCursor.exit(); onHover?(false) }
     var onDrag: ((CGFloat) -> Void)?
     var onDragEnd: (() -> Void)?
     var menuProvider: (() -> NSMenu)?
