@@ -86,7 +86,14 @@ echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
       kittyListen: (if $kittyListen != "" then $kittyListen else $p.kittyListen end)
     }
   + ( if .hook_event_name == "SessionStart" then {state: "idle", text: "พร้อมแล้ว~"}
-      elif .hook_event_name == "UserPromptSubmit" then {state: "running", text: "รับงานแล้ว!", task: (.prompt // "" | short(80)), plan: []}
+      elif .hook_event_name == "UserPromptSubmit" then
+        # Claude Code also submits these as prompts: a subagent handing back, a background task
+        # finishing, another session messaging. They continue the task, so keep it and its plan.
+        ((((.prompt // "") | capture("^\\s*<(?<t>agent-message|task-notification|cross-session-message)[ >]") | .t)) // null) as $inj
+        | if $inj then {state: "running", task: $p.task, plan: ($p.plan // []),
+                        text: {"agent-message": "agent ส่งงานกลับมา", "task-notification": "งานเบื้องหลังเสร็จ",
+                               "cross-session-message": "มีข้อความจาก session อื่น"}[$inj]}
+          else {state: "running", text: "รับงานแล้ว!", task: (.prompt // "" | short(80)), plan: []} end
       elif .hook_event_name == "PreToolUse" then
         (if (.tool_name // "") | test("wrap_up$") then
            {state: "running", text: "สรุปงาน", plan: ($p.plan // [] | map(. + {s: "completed"}))}
