@@ -19,7 +19,9 @@ import EventKit
 
 let home = FileManager.default.homeDirectoryForCurrentUser
 let baseDir = home.appendingPathComponent(".claude/angeling-pet")
-let stateDir = baseDir.appendingPathComponent("state")
+// Debug: ANGELING_STATE_DIR points snapshots at fake session files instead of the real ones.
+let stateDir = ProcessInfo.processInfo.environment["ANGELING_STATE_DIR"].map { URL(fileURLWithPath: $0) }
+    ?? baseDir.appendingPathComponent("state")
 
 // MARK: - Sprite sheet (Codex pet format v2: 8 cols x 11 rows, 192x208 cells)
 
@@ -131,11 +133,12 @@ func priority(_ st: String) -> Int {
 }
 
 let alarmOrange = NSColor(calibratedRed: 0.93, green: 0.48, blue: 0.08, alpha: 1)
+let alertRed = NSColor(calibratedRed: 0.86, green: 0.15, blue: 0.2, alpha: 1)
 let discordBlurple = NSColor(calibratedRed: 0.35, green: 0.4, blue: 0.95, alpha: 1)
 let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
 let clockTime: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
-let icons: [String: String] = ["waiting": "🙋", "failed": "😣", "running": "⚙️", "review": "🔍", "done": "✨", "idle": "💤"]
-let statusLabel: [String: String] = ["waiting": "รอคุณ", "failed": "ติดปัญหา", "running": "กำลังทำ",
+let icons: [String: String] = ["waiting": "⚠️", "failed": "😣", "running": "⚙️", "review": "🔍", "done": "✨", "idle": "💤"]
+let statusLabel: [String: String] = ["waiting": "ต้องดูตอนนี้", "failed": "ติดปัญหา", "running": "กำลังทำ",
                                      "review": "กำลังอ่าน", "done": "เสร็จแล้ว", "idle": "ว่าง"]
 
 // MARK: - Jump to a session's window
@@ -625,6 +628,17 @@ final class RowView: NSView {
     private var hovering = false { didSet { needsDisplay = true } }
 
     var accent: NSColor? { didSet { needsDisplay = true } }
+    /// Slowly pulse the accent border (rows that need you now).
+    var pulse = false { didSet { syncPulse() } }
+    private var pulseTimer: Timer?
+
+    private func syncPulse() {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        guard pulse, window != nil else { return }
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 20, repeats: true) { [weak self] _ in self?.needsDisplay = true }
+    }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncPulse() }
 
     init(text: NSAttributedString, width: CGFloat, clickable: Bool) {
         super.init(frame: .zero)
@@ -649,11 +663,13 @@ final class RowView: NSView {
     }
     override func draw(_ dirtyRect: NSRect) {
         if let a = accent {
-            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75), xRadius: 8, yRadius: 8)
-            a.withAlphaComponent(hovering ? 0.22 : 0.1).setFill()
+            // 0…1 on a 1.6 s cycle while pulsing; steady otherwise.
+            let p = pulse ? (1 - cos(Date().timeIntervalSinceReferenceDate * 2 * .pi / 1.6)) / 2 : 1
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.25, dy: 1.25), xRadius: 8, yRadius: 8)
+            a.withAlphaComponent((hovering ? 0.22 : 0.1) + (pulse ? 0.08 * p : 0)).setFill()
             path.fill()
-            a.setStroke()
-            path.lineWidth = 1.5
+            a.withAlphaComponent(pulse ? 0.35 + 0.65 * p : 1).setStroke()
+            path.lineWidth = pulse ? 1.5 + p : 1.5
             path.stroke()
             return
         }
@@ -779,7 +795,8 @@ final class ToggleButton: NSView {
 final class BadgeView: NSView {
     var count = 0 { didSet { isHidden = count == 0; needsDisplay = true } }
     var color = NSColor(calibratedRed: 0.9, green: 0.25, blue: 0.35, alpha: 1)
-    var text: String { count > 999 ? "999+" : "\(count)" }
+    var label: String? { didSet { needsDisplay = true } }   // shown instead of the count
+    var text: String { label ?? (count > 999 ? "999+" : "\(count)") }
     /// Circle for one digit, pill for more.
     var width: CGFloat { max(18, ceil(NSAttributedString(string: text, attributes: [.font: NSFont.boldSystemFont(ofSize: 11)]).size().width) + 10) }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -905,6 +922,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var activityHidden: Bool { get { d.bool(forKey: "activityHidden") } set { d.set(newValue, forKey: "activityHidden") } }
     var petHidden: Bool { get { d.bool(forKey: "petHidden") } set { d.set(newValue, forKey: "petHidden") } }
     var popWhenWaiting: Bool { get { d.object(forKey: "popWhenWaiting") as? Bool ?? true } set { d.set(newValue, forKey: "popWhenWaiting") } }
+    var waitSound: Bool { flag("waitSound") }
 
     init(sheet: SpriteSheet) {
         self.sheet = sheet
@@ -1341,7 +1359,8 @@ final class PetController: NSObject, NSMenuDelegate {
             i.target = self; i.representedObject = key; i.state = flag(key) ? .on : .off
         }
         m.addItem(withTitle: "แสดงในบับเบิล", action: nil, keyEquivalent: "").submenu = opts
-        item("โผล่ออกมาเมื่อมีงานรอคุณ", #selector(togglePop), on: popWhenWaiting)
+        item("โผล่ออกมาเมื่อมีงานที่ต้องดู", #selector(togglePop), on: popWhenWaiting)
+        item("เสียงเตือนเมื่อมีงานที่ต้องดู", #selector(toggleWaitSound), on: waitSound)
         item("แจ้งเตือน LINE", #selector(toggleLine), on: showLine)
         item("แจ้งเตือน Discord", #selector(toggleDiscord), on: showDiscord)
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
@@ -1388,7 +1407,8 @@ final class PetController: NSObject, NSMenuDelegate {
         d.set(!flag(k), forKey: k)
         refresh()
     }
-    @objc func togglePop() { popWhenWaiting.toggle() }
+    @objc func togglePop() { popWhenWaiting.toggle(); refresh() }
+    @objc func toggleWaitSound() { d.set(!waitSound, forKey: "waitSound") }
     @objc func toggleLine() { d.set(!showLine, forKey: "showLine"); lineDismissed = nil; pollLine(); refresh() }
     @objc func openLine() { setOverride("waving", for: 0.8); LineWatch.open() }
     @objc func dismissLine() { lineDismissed = lineUnread; refresh() }
@@ -1430,6 +1450,9 @@ final class PetController: NSObject, NSMenuDelegate {
         if petHidden && popWhenWaiting && newlyWaiting && didFirstRefresh {
             petHidden = false
             panel.orderFrontRegardless()
+        }
+        if newlyWaiting && didFirstRefresh && waitSound && ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil {
+            alarmSound("Funk")?.play()
         }
 
         // Menu bar: icon + count of sessions needing you.
@@ -1529,15 +1552,22 @@ final class PetController: NSObject, NSMenuDelegate {
     func layout(_ live: [(SessionState, String)]) {
         guard !petHidden else { return }
         // Rebuilding every tick would swallow clicks and hover, so only rebuild on change.
-        let sig = activityHidden ? "hidden|" + reminderSignature() : rowsSignature(live)
+        // A hidden bubble still shows ringing reminders and, unless turned off, sessions that need you.
+        let waiting = live.filter { $0.1 == "waiting" }
+        let urgent = popWhenWaiting ? waiting : []
+        let sig = activityHidden ? "hidden|" + reminderSignature() + "|" + rowsSignature(urgent) : rowsSignature(live)
         if sig != lastRowsSig {
             lastRowsSig = sig
-            let rows = activityHidden ? reminderRows(width: winWidth - bubble.pad * 2, ringingOnly: true) : makeRows(live)
+            let rows = activityHidden ? reminderRows(width: winWidth - bubble.pad * 2, ringingOnly: true) + makeRows(urgent, urgentOnly: true)
+                                      : makeRows(live)
             bubbleSize = rows.isEmpty ? .zero : bubble.set(rows: rows, width: winWidth)
         }
         let showBubble = bubbleSize != .zero
         bubble.isHidden = !showBubble
-        badge.count = activityHidden ? live.filter { ["waiting", "failed", "running", "review"].contains($0.1) }.count : 0
+        // "!" whenever a session needs you; otherwise the active count while the bubble is hidden.
+        badge.label = waiting.isEmpty ? nil : "!"
+        badge.count = !waiting.isEmpty ? waiting.count
+            : activityHidden ? live.filter { ["failed", "running", "review"].contains($0.1) }.count : 0
 
         // Emote floats above the head (like in RO); the bubble moves up to make room for it.
         var emoteRect = NSRect.zero
@@ -1592,7 +1622,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if f.origin != panel.frame.origin { panel.setFrameOrigin(f.origin) }
     }
 
-    func makeRows(_ live: [(SessionState, String)]) -> [RowView] {
+    func makeRows(_ live: [(SessionState, String)], urgentOnly: Bool = false) -> [RowView] {
         let w = winWidth - bubble.pad * 2
         let green = NSColor(calibratedRed: 0.2, green: 0.62, blue: 0.33, alpha: 1)
         let bold = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11),
@@ -1603,12 +1633,13 @@ final class PetController: NSObject, NSMenuDelegate {
                    .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)]
 
         let doneLabel = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: green]
+        let alertLabel = [NSAttributedString.Key.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: alertRed]
 
         func rowText(_ s: SessionState, _ st: String, detailed: Bool) -> NSAttributedString {
             let out = NSMutableAttributedString()
             func add(_ t: String, _ a: [NSAttributedString.Key: Any]) { out.append(NSAttributedString(string: t, attributes: a)) }
             add("\(icons[st] ?? "") \(s.project ?? "?")", bold)
-            add("  \(statusLabel[st] ?? "")", st == "done" ? doneLabel : dim)
+            add("  \(statusLabel[st] ?? "")", st == "done" ? doneLabel : st == "waiting" ? alertLabel : dim)
             if let plan = s.plan, !plan.isEmpty {
                 add(" · \(plan.filter { $0.s == "completed" }.count)/\(plan.count)", dim)
             }
@@ -1629,6 +1660,11 @@ final class PetController: NSObject, NSMenuDelegate {
             if st == "done" {
                 r.accent = green
                 r.onClick = { [weak self] in self?.openSession(s); self?.dismiss(s) }
+            } else if st == "waiting" {
+                r.accent = alertRed
+                r.pulse = true
+                r.toolTip = "Claude รอคุณอยู่ คลิกเพื่อไปตอบ"
+                r.onClick = { [weak self] in self?.openSession(s) }
             } else {
                 r.onClick = { [weak self] in self?.openSession(s) }
             }
@@ -1684,20 +1720,24 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
+        // Sessions that need you go above everything else, every one of them.
+        let waiting = live.filter { $0.1 == "waiting" }
+        if urgentOnly { return waiting.map { sessionRow($0.0, $0.1, detailed: false) } }
         let lineRows = reminderRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
 
         if expanded {
             if live.isEmpty && lineRows.isEmpty {
                 return [RowView(text: NSAttributedString(string: "ยังไม่มีงานที่กำลังทำ~", attributes: normal), width: w, clickable: false)]
             }
-            return lineRows + live.map { sessionRow($0.0, $0.1, detailed: true) }
+            return waiting.map { sessionRow($0.0, $0.1, detailed: true) } + lineRows
+                + live.filter { $0.1 != "waiting" }.map { sessionRow($0.0, $0.1, detailed: true) }
         }
 
-        let activeStates = ["running", "review", "waiting", "failed"]
+        let activeStates = ["running", "review", "failed"]
         let active = live.filter { activeStates.contains($0.1) }
         let finished = live.filter { $0.1 == "done" }
-        var rows: [RowView] = lineRows
-        if let (s, st) = active.first {
+        var rows: [RowView] = waiting.map { sessionRow($0.0, $0.1, detailed: false) } + lineRows
+        if waiting.isEmpty, let (s, st) = active.first {
             rows.append(sessionRow(s, st, detailed: false))
         }
         // Finished tasks stay listed in green until opened, dismissed, or 30 min old.
@@ -1707,11 +1747,10 @@ final class PetController: NSObject, NSMenuDelegate {
             more.onClick = { [weak self] in self?.toggleExpand() }
             rows.append(more)
         }
-        let others = active.dropFirst()
+        let others = waiting.isEmpty ? Array(active.dropFirst()) : active
         if !others.isEmpty {
-            let waiting = others.filter { $0.1 == "waiting" }.count
-            let more = RowView(text: NSAttributedString(string: "+\(others.count) session กำลังทำงาน" + (waiting > 0 ? " · \(waiting) รอคุณ" : "") + "  ▾",
-                                                        attributes: dim), width: w, clickable: true)
+            let more = RowView(text: NSAttributedString(string: "+\(others.count) session กำลังทำงาน  ▾", attributes: dim),
+                               width: w, clickable: true)
             more.onClick = { [weak self] in self?.toggleExpand() }
             rows.append(more)
         }

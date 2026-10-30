@@ -28,7 +28,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 |---|---|
 | `UserPromptSubmit` | กำลังทำ, บันทึก prompt |
 | `PreToolUse` | กำลังทำ หรือตรวจดู (Read/Grep/Glob/Web) พร้อมบอกว่าทำอะไร; อ่าน task list จากเครื่องมือของ Claude desktop |
-| `PermissionRequest`, `Notification` | รอคุณ |
+| `PermissionRequest`, `Notification` | ต้องดูตอนนี้ |
 | `PostToolUseFailure`, `StopFailure` | ติดปัญหา |
 | `Stop` | เสร็จแล้ว พร้อมข้อความสุดท้ายของ Claude |
 | `SessionEnd` | ลบไฟล์ |
