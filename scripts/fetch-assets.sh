@@ -5,6 +5,7 @@
 #   assets/emotes/*.gif       Ragnarok Online emotes (/lv /heh /swt /wah /omg /slur)
 #   assets/sounds/levelup.mp3 Ragnarok Online level-up sound (reminder chime)
 #   assets/characters/        Bomber characters to pick from (scripts/import-characters.py)
+#   assets/pets/<id>/         extra Codex v2 pets to pick from, e.g. Bee Husky (scripts/import-pet.swift)
 # Sources, first that works: a local Codex pet (sprite sheet only), the latest GitHub Release,
 # then the original sites (irowiki.org, myinstants.com).
 set -euo pipefail
@@ -73,6 +74,19 @@ if [ ! -s "$out/characters.json" ]; then
   else
     rm -rf "$out"
     echo "Could not download the Bomber characters (Angeling works without them)" >&2
+  fi
+  rm -f "$zip"
+fi
+
+# 5. Extra Codex pets (the release only)
+out="$ASSETS/pets"
+if ! ls "$out"/*/pet.json >/dev/null 2>&1; then
+  zip=$(mktemp)
+  if download "$RELEASE/pets.zip" "$zip" "Zip" && mkdir -p "$out" && unzip -qo "$zip" -d "$out"; then
+    echo "Pets: $(ls "$out" | tr '\n' ' ')"
+  else
+    rm -rf "$out"
+    echo "Could not download the extra pets (Angeling works without them)" >&2
   fi
   rm -f "$zip"
 fi

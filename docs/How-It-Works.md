@@ -17,6 +17,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 | `~/.claude/angeling-pet/reminders.json` | การเตือนที่ตั้งไว้ |
 | `~/.claude/angeling-pet/spritesheet.webp`, `emotes/`, `sounds/` | ภาพและเสียงเตือน |
 | `~/.claude/angeling-pet/characters/` | ภาพตัวละคร Bomber และตารางเฟรม `characters.json` |
+| `~/.claude/angeling-pet/pets/<id>/` | เพ็ตแบบ Codex เพิ่มเติม เช่น Bee Husky (`pet.json` และ sprite sheet) |
 | `~/.claude/settings.json` | ลงทะเบียน hook |
 | `~/Library/LaunchAgents/local.angeling.pet.plist` | เปิดเองตอน login |
 | `defaults read local.angeling.pet` | การตั้งค่า (ตำแหน่ง, ตัวเลือก) |

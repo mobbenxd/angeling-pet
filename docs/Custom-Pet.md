@@ -2,7 +2,7 @@
 
 ## เลือกตัวละคร Bomber
 
-คลิกขวาที่ Angeling หรือไอคอนแถบเมนู แล้วเลือก **ตัวละคร ▸** มี Angeling และตัวละครจากเกม Bomber 18 ตัว:
+คลิกขวาที่ Angeling หรือไอคอนแถบเมนู แล้วเลือก **ตัวละคร ▸** กลุ่มแรกคือ Angeling และ Bee Husky (ลูกหมาไซบีเรียนฮัสกี้) ที่ทำท่าได้ครบเหมือน Angeling กลุ่มที่สองคือตัวละครจากเกม Bomber 18 ตัว:
 Thunder, Bomber Horse, Bomber Husky, Bomber Cat, Cool Pomeranian, Pumpkin Raccoon, Chubby Valkyrie, Chubby Drake, Chubby Mage, Chubby Beerus, Chubby Legend, Carrot Engineer, Sun Sage, Noid, Chick Squad, Chubby Cloudy, Tommy Shelby, Charles Leclerc
 
 ตัวละครเปลี่ยนทันทีและจำไว้หลังเปิดแอปใหม่ ท่าทางของตัวละคร Bomber:
@@ -49,6 +49,17 @@ ANGELING_CODEX_PET=<ชื่อเพ็ต> ./install.sh   # ต้องใ�
 | 7 | running |
 | 8 | review |
 | 9–10 | มองไปรอบๆ |
+
+## เพิ่มเพ็ตที่สร้างเองเข้าเมนูตัวละคร
+
+ถ้าให้ AI สร้าง sprite sheet มา ภาพมักผิดขนาดหรือแถวไม่ตรงช่อง สคริปต์นี้จะหาแต่ละเฟรมเอง แล้ววางลงช่อง 192 × 208 ให้พอดี (ต้องมีแถวครบ 11 แถว และจำนวนเฟรมแต่ละแถวตรงตามตาราง: 7, 8, 8, 4, 5, 8, 6, 6, 6, 8, 8):
+
+```bash
+swift scripts/import-pet.swift ~/Downloads/my-pet.png my-pet "My Pet"
+./install.sh
+```
+
+เพ็ตจะไปอยู่ที่ `~/.claude/angeling-pet/pets/my-pet/` และขึ้นในเมนู **ตัวละคร ▸** หลังเปิดแอปใหม่ จะคัดลอกโฟลเดอร์เพ็ตของ Codex (`~/.codex/pets/<ชื่อ>/`) ไปวางที่นั่นตรงๆ ก็ได้
 
 ชื่อแอปและไอคอนในแถบเมนูยังเป็น Angeling แต่ภาพตัวละครจะเปลี่ยนตามไฟล์ใหม่
 
