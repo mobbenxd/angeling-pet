@@ -54,6 +54,8 @@ rm ~/.claude/angeling-pet/state/<session-id>.json
 | ใช้กับ | วิธีแก้ |
 |---|---|
 | Terminal / iTerm2 | System Settings → Privacy & Security → **Automation** → เปิดให้ Angeling ควบคุม Terminal หรือ iTerm |
+| kitty | ไปถูกแอปแต่ผิดหน้าต่าง: ยังไม่ได้เปิด remote control ดู [Usage](Usage.md) แล้วปิดและเปิด kitty ใหม่ |
+| herdr | ต้องเป็นเวอร์ชันที่มีคำสั่ง `herdr agent focus` ส่วน session ใน `herdr --remote` ยังกระโดดไปไม่ได้ |
 | แอป Claude desktop | ต้องเป็นแอปเวอร์ชันที่รองรับ Code tab ถ้ายังไม่ไป Angeling จะแค่เรียกแอป Claude ขึ้นมา |
 | session ที่เริ่มก่อนติดตั้ง | ยังไม่รู้ว่าอยู่หน้าต่างไหน จะรู้หลังจาก session นั้นมีความเคลื่อนไหวครั้งถัดไป |
 

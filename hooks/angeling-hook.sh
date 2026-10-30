@@ -49,7 +49,10 @@ TTY_NAME=$(ps -o tty= -p "${CLAUDE_PID:-$PPID}" 2>/dev/null | tr -d ' ')
 [ "$TTY_NAME" = "??" ] && TTY_NAME=""
 echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
   --arg host "${CLAUDE_CODE_HOST_SESSION_ID:-}" --arg app "${__CFBundleIdentifier:-}" \
-  --arg term "${TERM_PROGRAM:-}" --arg tty "$TTY_NAME" --arg iterm "${ITERM_SESSION_ID:-}" --argjson prevobj "$PREV_JSON" '
+  --arg term "${TERM_PROGRAM:-}" --arg tty "$TTY_NAME" --arg iterm "${ITERM_SESSION_ID:-}" \
+  --arg herdr "${HERDR_PANE_ID:-}" --arg herdrBin "${HERDR_BIN_PATH:-}" --arg herdrSock "${HERDR_SOCKET_PATH:-}" \
+  --arg kittyWin "${KITTY_WINDOW_ID:-}" --arg kittyListen "${KITTY_LISTEN_ON:-}" \
+  --argjson prevobj "$PREV_JSON" '
   def short(n): tostring | gsub("\\[(?<t>[^\\]]*)\\]\\([^)]*\\)"; "\(.t)") | gsub("\\*\\*|`|^#+ "; "") | gsub("[\\n\\r\\t]+"; " ") | if length > n then .[0:n] + "…" else . end;
   def base: tostring | split("/") | last;
   def tooltext:
@@ -75,7 +78,12 @@ echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
       app: (if $app != "" then $app else $p.app end),
       term: (if $term != "" then $term else $p.term end),
       tty: (if $tty != "" then "/dev/" + $tty else $p.tty end),
-      iterm: (if $iterm != "" then $iterm else $p.iterm end)
+      iterm: (if $iterm != "" then $iterm else $p.iterm end),
+      herdr: (if $herdr != "" then $herdr else $p.herdr end),
+      herdrBin: (if $herdrBin != "" then $herdrBin else $p.herdrBin end),
+      herdrSock: (if $herdrSock != "" then $herdrSock else $p.herdrSock end),
+      kittyWin: (if $kittyWin != "" then $kittyWin else $p.kittyWin end),
+      kittyListen: (if $kittyListen != "" then $kittyListen else $p.kittyListen end)
     }
   + ( if .hook_event_name == "SessionStart" then {state: "idle", text: "พร้อมแล้ว~"}
       elif .hook_event_name == "UserPromptSubmit" then {state: "running", text: "รับงานแล้ว!", task: (.prompt // "" | short(80)), plan: []}

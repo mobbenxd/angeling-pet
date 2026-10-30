@@ -86,6 +86,11 @@ struct SessionState: Decodable {
     let term: String?
     let tty: String?
     let iterm: String?
+    let herdr: String?      // herdr pane id (w4S:p1) when the session runs inside herdr
+    let herdrBin: String?
+    let herdrSock: String?
+    let kittyWin: String?    // KITTY_WINDOW_ID when the session runs straight in kitty
+    let kittyListen: String? // KITTY_LISTEN_ON (set only when kitty.conf has listen_on)
 }
 
 func loadSessions() -> [SessionState] {
@@ -140,6 +145,29 @@ enum Focus {
         let app = s.app ?? ""
         if let host = s.host, host.hasPrefix("local_") {
             openURL("claude://code/continue?session=\(host)&source=desktop_action")
+        } else if let pane = s.herdr {
+            // herdr runs the session in a headless server: switch herdr to the pane, then raise
+            // the terminal window (kitty, Ghostty, …) that shows a herdr client.
+            DispatchQueue.global().async {
+                var env = ProcessInfo.processInfo.environment
+                if let sock = s.herdrSock { env["HERDR_SOCKET_PATH"] = sock }
+                output(s.herdrBin ?? NSHomeDirectory() + "/.local/bin/herdr", ["agent", "focus", pane], env: env)
+                guard let c = herdrClient() else { return }
+                // ps -E appends the client's environment, where kitty names the window it runs in.
+                let vars = (output("/bin/ps", ["-E", "-o", "command=", "-p", "\(c.pid)"]) ?? "").split(separator: " ")
+                func v(_ k: String) -> String? { vars.first { $0.hasPrefix(k + "=") }.map { String($0.dropFirst(k.count + 1)) } }
+                if c.app.bundleIdentifier == kittyBundle, let win = v("KITTY_WINDOW_ID"), let listen = v("KITTY_LISTEN_ON") {
+                    kittyFocus(c.app.bundleURL, window: win, listen: listen)
+                }
+                DispatchQueue.main.async { c.app.activate(options: []) }
+            }
+        } else if app == kittyBundle, let win = s.kittyWin, let listen = s.kittyListen {
+            DispatchQueue.global().async {
+                kittyFocus(NSWorkspace.shared.urlForApplication(withBundleIdentifier: kittyBundle), window: win, listen: listen)
+                DispatchQueue.main.async {
+                    NSRunningApplication.runningApplications(withBundleIdentifier: kittyBundle).first?.activate(options: [])
+                }
+            }
         } else if app == "com.apple.Terminal" || s.term == "Apple_Terminal", let tty = s.tty {
             osa("""
             tell application "Terminal"
@@ -180,6 +208,57 @@ enum Focus {
         } else if !app.isEmpty, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
+    }
+
+    static let kittyBundle = "net.kovidgoyal.kitty"
+
+    /// A local herdr client and the GUI app it runs in: walk up from each `herdr` process until an
+    /// ancestor is a regular app. Skips the server and `herdr --remote` (another machine's herdr).
+    static func herdrClient() -> (pid: Int32, app: NSRunningApplication)? {
+        var parent: [Int32: Int32] = [:]
+        var clients: [Int32] = []
+        for line in (output("/bin/ps", ["-axo", "pid=,ppid=,command="]) ?? "").split(separator: "\n") {
+            let f = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard f.count == 3, let pid = Int32(f[0]), let ppid = Int32(f[1]) else { continue }
+            parent[pid] = ppid
+            let cmd = f[2].split(separator: " ")
+            if cmd.first.map({ $0.hasSuffix("/herdr") || $0 == "herdr" }) == true,
+               !cmd.contains(where: { ["server", "client", "--remote"].contains($0) }) {
+                clients.append(pid)
+            }
+        }
+        for c in clients {
+            var pid = c
+            while let pp = parent[pid], pp > 1 {
+                if let a = NSRunningApplication(processIdentifier: pp), a.activationPolicy == .regular { return (c, a) }
+                pid = pp
+            }
+        }
+        return nil
+    }
+
+    /// Focus one kitty window over kitty's remote-control socket. Needs `allow_remote_control` and
+    /// `listen_on` in kitty.conf; without them kitty only comes to the front.
+    static func kittyFocus(_ app: URL?, window: String, listen: String) {
+        guard let app else { return }
+        output(app.appendingPathComponent("Contents/MacOS/kitten").path,
+               ["@", "--to", listen, "focus-window", "--match", "id:\(window)"])
+    }
+
+    /// Run a tool and wait for it; its stdout, or nil when it could not start.
+    @discardableResult
+    static func output(_ path: String, _ args: [String], env: [String: String]? = nil) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        if let env { p.environment = env }
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
     }
 
     static func openURL(_ s: String) { if let u = URL(string: s) { NSWorkspace.shared.open(u) } }
