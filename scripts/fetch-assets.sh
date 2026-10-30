@@ -4,6 +4,7 @@
 #   assets/spritesheet.webp   Codex pet sprite sheet (v2, 1536x2288)
 #   assets/emotes/*.gif       Ragnarok Online emotes (/lv /heh /swt /wah /omg /slur)
 #   assets/sounds/levelup.mp3 Ragnarok Online level-up sound (reminder chime)
+#   assets/characters/        Bomber characters to pick from (scripts/import-characters.py)
 # Sources, first that works: a local Codex pet (sprite sheet only), the latest GitHub Release,
 # then the original sites (irowiki.org, myinstants.com).
 set -euo pipefail
@@ -61,4 +62,17 @@ if [ ! -s "$out" ]; then
   else
     echo "Could not download the level-up sound (reminders use a macOS sound instead)" >&2
   fi
+fi
+
+# 4. Bomber characters (the release only)
+out="$ASSETS/characters"
+if [ ! -s "$out/characters.json" ]; then
+  zip=$(mktemp)
+  if download "$RELEASE/characters.zip" "$zip" "Zip" && mkdir -p "$out" && unzip -qo "$zip" -d "$out"; then
+    echo "Characters: $(($(ls "$out" | wc -l) - 1)) sheets"
+  else
+    rm -rf "$out"
+    echo "Could not download the Bomber characters (Angeling works without them)" >&2
+  fi
+  rm -f "$zip"
 fi

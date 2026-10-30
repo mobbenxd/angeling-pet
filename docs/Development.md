@@ -46,6 +46,8 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_UPDATE_CMD="…"` | คำสั่งที่ใช้แทน `get.sh` ตอนอัปเดต |
 | `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
 | `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
+| `ANGELING_CHARACTER=thunder` | ใช้ตัวละครนี้ (`angeling` หรือ `id` ใน `characters.json`) |
+| `ANGELING_ANIM=failed` | เล่นท่านี้ (`idle`, `running`, `review`, `waiting`, `failed`, `waving`, `jumping`, `running-left`, `running-right`) |
 | `ANGELING_THEME=dark` | ใช้ธีมนี้ (`classic`, `light`, `dark`, `glass`, `tokyo`, `ragnarok`, `auto`) |
 | `ANGELING_STATE_DIR=/path` | อ่านไฟล์ session จำลองจากโฟลเดอร์นี้แทนของจริง |
 
@@ -73,7 +75,13 @@ gh release create v1.2.3 dist/* --title "Angeling 1.2.3" --notes "…"
 | ไฟล์ | ใช้ทำอะไร |
 |---|---|
 | `Angeling.zip` | ชุดติดตั้งที่ `get.sh` ดาวน์โหลด: แอป universal (Apple silicon + Intel) ภาพ เสียง และสคริปต์ |
-| `spritesheet.webp`, `emote-*.gif`, `levelup.mp3` | ภาพและเสียงแยกไฟล์ สำหรับคนที่ติดตั้งจาก git clone |
+| `spritesheet.webp`, `emote-*.gif`, `levelup.mp3`, `characters.zip` | ภาพและเสียงแยกไฟล์ สำหรับคนที่ติดตั้งจาก git clone |
+
+`package.sh` ต้องมี `assets/characters/` ก่อน ถ้ายังไม่มีให้สร้างจากแพ็กต้นฉบับ:
+
+```bash
+python3 -I scripts/import-characters.py ~/Downloads/bomber-all-18-characters.zip
+```
 
 ทุก Release ต้องแนบไฟล์ครบทุกตัว เพราะ `get.sh` และ `fetch-assets.sh` ดึงจาก `releases/latest`
 

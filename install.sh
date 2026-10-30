@@ -49,6 +49,10 @@ chmod +x "$RUNTIME/hook.sh" "$RUNTIME/uninstall.sh"
 cp "$ROOT/assets/spritesheet.webp" "$RUNTIME/spritesheet.webp"
 cp "$ROOT"/assets/emotes/*.gif "$RUNTIME/emotes/" 2>/dev/null || true
 cp "$ROOT"/assets/sounds/*.mp3 "$RUNTIME/sounds/" 2>/dev/null || true
+if [ -s "$ROOT/assets/characters/characters.json" ]; then
+  rm -rf "$RUNTIME/characters"
+  cp -R "$ROOT/assets/characters" "$RUNTIME/characters"
+fi
 
 echo "==> Claude Code"
 CLAUDE=0

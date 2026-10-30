@@ -4,6 +4,7 @@ assets/emotes/*
 !assets/emotes/.gitkeep
 assets/sounds/*
 !assets/sounds/.gitkeep
+assets/characters/
 
 # Build output
 build/

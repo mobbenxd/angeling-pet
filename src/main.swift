@@ -35,7 +35,15 @@ func strip(_ row: Int, _ count: Int, _ dur: Double, _ last: Double, loops: Bool 
     Anim(row: row, durations: Array(repeating: dur, count: count - 1) + [last], loops: loops)
 }
 
-let anims: [String: Anim] = [
+/// A character's artwork: frames on rows of 192x208 cells, plus which row and timing each animation uses.
+protocol Sprite: AnyObject {
+    var anims: [String: Anim] { get }
+    func frame(row: Int, col: Int) -> NSImage?
+}
+
+let cellSize = NSSize(width: 192, height: 208)
+
+let codexAnims: [String: Anim] = [
     "idle": Anim(row: 0, durations: [1400, 110, 110, 140, 140, 320, 900], loops: true),
     "running-right": strip(1, 8, 120, 220),
     "running-left": strip(2, 8, 120, 220),
@@ -47,10 +55,10 @@ let anims: [String: Anim] = [
     "review": strip(8, 6, 150, 280),
 ]
 
-final class SpriteSheet {
-    let cellW = 192, cellH = 208
+final class SpriteSheet: Sprite {
     private var cache: [String: NSImage] = [:]
     let image: CGImage
+    var anims: [String: Anim] { codexAnims }
 
     init?(url: URL) {
         guard let img = NSImage(contentsOf: url),
@@ -61,9 +69,99 @@ final class SpriteSheet {
     func frame(row: Int, col: Int) -> NSImage? {
         let key = "\(row)-\(col)"
         if let c = cache[key] { return c }
-        let rect = CGRect(x: col * cellW, y: row * cellH, width: cellW, height: cellH)
+        let rect = CGRect(x: CGFloat(col) * cellSize.width, y: CGFloat(row) * cellSize.height, width: cellSize.width, height: cellSize.height)
         guard let cg = image.cropping(to: rect) else { return nil }
-        let img = NSImage(cgImage: cg, size: NSSize(width: cellW, height: cellH))
+        let img = NSImage(cgImage: cg, size: cellSize)
+        cache[key] = img
+        return img
+    }
+}
+
+// MARK: - Bomber characters (assets/characters, made by scripts/import-characters.py)
+
+/// One frame: a rect on one of the character's sheets. Stored as [file, x, y, w, h].
+struct BomberFrame: Decodable {
+    let file: String
+    let rect: CGRect
+    init(from decoder: Decoder) throws {
+        var c = try decoder.unkeyedContainer()
+        file = try c.decode(String.self)
+        rect = CGRect(x: try c.decode(Double.self), y: try c.decode(Double.self),
+                      width: try c.decode(Double.self), height: try c.decode(Double.self))
+    }
+}
+
+/// Rows: walk down, walk left, walk right, walk up, place, hurt; 4 frames each.
+struct BomberCharacter: Decodable {
+    let id: String
+    let name: String
+    let rows: [[BomberFrame]]
+    let flip: [Int]   // rows drawn mirrored
+}
+
+let charactersDir = baseDir.appendingPathComponent("characters")
+let bomberCharacters: [BomberCharacter] = {
+    guard let data = try? Data(contentsOf: charactersDir.appendingPathComponent("characters.json")),
+          let all = try? JSONDecoder().decode([BomberCharacter].self, from: data) else { return [] }
+    let fm = FileManager.default
+    return all.filter { c in c.rows.count == 6 && c.rows.allSatisfy { $0.count == 4 }
+        && c.rows.joined().allSatisfy { fm.fileExists(atPath: charactersDir.appendingPathComponent($0.file).path) } }
+}()
+
+let bomberAnims: [String: Anim] = [
+    "idle": Anim(row: 0, durations: [1600, 180, 180, 180], loops: true),
+    "running-right": strip(2, 4, 130, 130),
+    "running-left": strip(1, 4, 130, 130),
+    "waving": strip(4, 4, 150, 220),
+    "jumping": strip(4, 4, 130, 200, loops: false),
+    "failed": strip(5, 4, 140, 220),
+    "waiting": strip(4, 4, 180, 400),
+    "running": strip(0, 4, 140, 140),
+    "review": strip(0, 4, 220, 220),
+]
+
+/// Draws a Bomber character's frames into Angeling-sized cells, so the rest of the app treats it
+/// like a Codex sheet. Sheets differ in resolution, so each sheet gets one scale that fits its
+/// largest frame; the figure stands on the cell's bottom edge.
+final class BomberSprite: Sprite {
+    let character: BomberCharacter
+    private var sheets: [String: CGImage] = [:]
+    private var scales: [String: CGFloat] = [:]
+    private var cache: [String: NSImage] = [:]
+    var anims: [String: Anim] { bomberAnims }
+
+    init?(_ character: BomberCharacter) {
+        self.character = character
+        let box = NSSize(width: 184, height: 196)
+        for f in character.rows.joined() where sheets[f.file] == nil {
+            guard let img = NSImage(contentsOf: charactersDir.appendingPathComponent(f.file)),
+                  let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+            sheets[f.file] = cg
+            let same = character.rows.joined().filter { $0.file == f.file }
+            scales[f.file] = min(box.width / same.map(\.rect.width).max()!, box.height / same.map(\.rect.height).max()!)
+        }
+    }
+
+    func frame(row: Int, col: Int) -> NSImage? {
+        let key = "\(row)-\(col)"
+        if let c = cache[key] { return c }
+        guard character.rows.indices.contains(row), character.rows[row].indices.contains(col) else { return nil }
+        let f = character.rows[row][col]
+        guard let cg = sheets[f.file]?.cropping(to: f.rect), let scale = scales[f.file] else { return nil }
+        let size = NSSize(width: f.rect.width * scale, height: f.rect.height * scale)
+        let img = NSImage(size: cellSize)
+        img.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        if character.flip.contains(row) {
+            let t = NSAffineTransform()
+            t.translateX(by: cellSize.width, yBy: 0)
+            t.scaleX(by: -1, yBy: 1)
+            t.concat()
+        }
+        // Hurt frames blink, as in the game.
+        NSImage(cgImage: cg, size: size).draw(in: NSRect(x: (cellSize.width - size.width) / 2, y: 4, width: size.width, height: size.height),
+                                              from: .zero, operation: .sourceOver, fraction: row == 5 && col % 2 == 1 ? 0.35 : 1)
+        img.unlockFocus()
         cache[key] = img
         return img
     }
@@ -1207,7 +1305,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var sweatShown: Set<String> = []
     var lastActive = Date()
     var lastSlur = Date.distantPast
-    let sheet: SpriteSheet
+    let angeling: SpriteSheet
+    var sheet: Sprite
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     var animName = "idle"
@@ -1235,6 +1334,14 @@ final class PetController: NSObject, NSMenuDelegate {
     var popWhenWaiting: Bool { get { d.object(forKey: "popWhenWaiting") as? Bool ?? true } set { d.set(newValue, forKey: "popWhenWaiting") } }
     var waitSound: Bool { flag("waitSound") }
     var themeChoice: String { ProcessInfo.processInfo.environment["ANGELING_THEME"] ?? d.string(forKey: "theme") ?? "classic" }
+    static var characterChoice: String {
+        ProcessInfo.processInfo.environment["ANGELING_CHARACTER"] ?? UserDefaults.standard.string(forKey: "character") ?? "angeling"
+    }
+
+    /// The chosen character's artwork; Angeling when it is "angeling" or its files are gone.
+    static func sprite(_ id: String, angeling: SpriteSheet) -> Sprite {
+        bomberCharacters.first { $0.id == id }.flatMap { BomberSprite($0) } ?? angeling
+    }
 
     /// Switch to the chosen theme ("auto" follows macOS light / dark, so this runs every refresh).
     func applyTheme() {
@@ -1250,7 +1357,8 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     init(sheet: SpriteSheet) {
-        self.sheet = sheet
+        angeling = sheet
+        self.sheet = PetController.sprite(PetController.characterChoice, angeling: sheet)
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 140),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
@@ -1589,7 +1697,7 @@ final class PetController: NSObject, NSMenuDelegate {
 
     func showFrame() {
         frameTimer?.invalidate()
-        let a = anims[animName] ?? anims["idle"]!
+        let a = sheet.anims[animName] ?? sheet.anims["idle"]!
         pet.image = sheet.frame(row: a.row, col: frameIndex)
         let dur = a.durations[frameIndex] / 1000
         frameTimer = Timer.scheduledTimer(withTimeInterval: dur, repeats: false) { [weak self] _ in
@@ -1724,6 +1832,14 @@ final class PetController: NSObject, NSMenuDelegate {
             i.target = self; i.representedObject = id; i.state = themeChoice == id ? .on : .off
         }
         m.addItem(withTitle: "ธีม", action: nil, keyEquivalent: "").submenu = themes
+        if !bomberCharacters.isEmpty {
+            let chars = NSMenu()
+            for (id, title) in [("angeling", "Angeling")] + bomberCharacters.map({ ($0.id, $0.name) }) {
+                let i = chars.addItem(withTitle: title, action: #selector(setCharacter(_:)), keyEquivalent: "")
+                i.target = self; i.representedObject = id; i.state = PetController.characterChoice == id ? .on : .off
+            }
+            m.addItem(withTitle: "ตัวละคร", action: nil, keyEquivalent: "").submenu = chars
+        }
         item("โผล่ออกมาเมื่อมีงานที่ต้องดู", #selector(togglePop), on: popWhenWaiting)
         item("เสียงเตือนเมื่อมีงานที่ต้องดู", #selector(toggleWaitSound), on: waitSound)
         item("แจ้งเตือน LINE", #selector(toggleLine), on: showLine)
@@ -1777,6 +1893,13 @@ final class PetController: NSObject, NSMenuDelegate {
         guard let id = sender.representedObject as? String else { return }
         d.set(id, forKey: "theme")
         refresh()
+    }
+    @objc func setCharacter(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        d.set(id, forKey: "character")
+        sheet = PetController.sprite(id, angeling: angeling)
+        statusItem.button?.image = statusIcon()
+        setOverride("waving", for: 1.2)
     }
     @objc func toggleWaitSound() { d.set(!waitSound, forKey: "waitSound") }
     @objc func toggleLine() { d.set(!showLine, forKey: "showLine"); lineDismissed = nil; pollLine(); refresh() }
@@ -2179,6 +2302,7 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     controller.refresh()
     if env["ANGELING_HOVER"] != nil { controller.toggle.isHidden = false }
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }
+    if let a = env["ANGELING_ANIM"] { controller.setOverride(a, for: 10) }
     if env["ANGELING_LATEST_VERSION"] != nil || env["ANGELING_FAKE_VERSION"] != nil { controller.checkForUpdates(manual: false) }
     if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {

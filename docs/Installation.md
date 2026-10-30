@@ -78,7 +78,7 @@ cd ~/apps/angeling-pet
 
 | ขั้น | ผลลัพธ์ |
 |---|---|
-| Artwork | เตรียมภาพ Angeling, emote 6 ตัว และเสียง Level Up |
+| Artwork | เตรียมภาพ Angeling, ตัวละคร Bomber, emote 6 ตัว และเสียง Level Up |
 | App | วาง `~/Applications/Angeling.app` |
 | Files | คัดลอกภาพ เสียง hook และตัวถอนการติดตั้งไปที่ `~/.claude/angeling-pet/` |
 | Claude Code | ถ้ามี Claude Code จะเพิ่ม hook ใน `~/.claude/settings.json` โดยไม่แตะ hook เดิม และสำรองไฟล์เดิมไว้ก่อน ถ้าไม่มีจะข้ามขั้นนี้ |

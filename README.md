@@ -61,6 +61,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.
   - Pops back out when a session needs you (can be turned off).
 - **Themes**: Classic (the pink bubble), Minimal light, Minimal dark, Liquid Glass (macOS 26+), Tokyo Night, Ragnarok (a Ragnarok Online window: blue title bar, grey frame, white list, flat rows), or follow macOS light / dark. Pick one from the ธีม menu.
+- **Characters**: swap Angeling for one of 18 Bomber characters (Thunder, Bomber Cat, Chick Squad, Tommy Shelby and more) from the ตัวละคร menu. Each one walks, waves and blinks when hurt in place of Angeling's animations. See [Use a different pet](docs/Custom-Pet.md).
 - **Ragnarok cursor**: hovering Angeling turns the pointer into the Ragnarok Online cursor, a blue and white arrowhead that spins like the one in the game. In the Ragnarok theme the bubble's rows and button use it too. The cursor is drawn by the app, so it needs no extra artwork.
 - **Needs you now**: when Claude asks for permission or asks you something, the row turns red with a slow pulse and moves to the top. Angeling gets a red "!" badge and plays a short sound (can be muted).
 - **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
@@ -149,6 +150,7 @@ Ragnarok Online, Angeling, the emotes and the level-up sound are © Gravity Co.,
 - **Sprite sheet**: your Codex pet `~/.codex/pets/${ANGELING_CODEX_PET:-angeling}`, if present; otherwise the release. You can also drop any Codex v2 sheet at `assets/spritesheet.webp`. See [Use a different pet](docs/Custom-Pet.md).
 - **Emotes**: the release; otherwise the [iRO Wiki emote list](https://irowiki.org/wiki/Emotes).
 - **Reminder chime**: the release; otherwise [MyInstants](https://www.myinstants.com/en/instant/level-up-ragnarok/). If neither works, reminders use a macOS sound.
+- **Bomber characters**: the release's `characters.zip`. The sheets come from the Bomber game; like the rest of the artwork they are not covered by the MIT license and are not in the git history. `scripts/import-characters.py <pack.zip>` rebuilds `assets/characters/` from the original pack.
 
 ## Development
 
