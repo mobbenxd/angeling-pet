@@ -40,6 +40,10 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_EMOTE=lv` | บังคับให้แสดง emote |
 | `ANGELING_LINE_UNREAD=5` | จำลองจำนวน LINE ที่ยังไม่อ่าน |
 | `ANGELING_DISCORD_UNREAD=4` | จำลองจำนวน Discord ที่ยังไม่อ่าน |
+| `ANGELING_FAKE_VERSION=1.0.0` | ทำเหมือนแอปเป็นเวอร์ชันนี้ (และเช็คอัปเดตทันทีตอน snapshot) |
+| `ANGELING_LATEST_VERSION=9.9.9` | ทำเหมือน GitHub มีเวอร์ชันนี้ (ไม่ต่อเน็ต) |
+| `ANGELING_UPDATE_NOW=1` | กดอัปเดตทันทีตอน snapshot |
+| `ANGELING_UPDATE_CMD="…"` | คำสั่งที่ใช้แทน `get.sh` ตอนอัปเดต |
 | `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
 | `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
 

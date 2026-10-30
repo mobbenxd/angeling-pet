@@ -63,6 +63,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
 - **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
 - **Discord**: a purple Discord row shows how many DMs and @mentions are unread. The number is Discord's own Dock badge count, so no permission is needed and no message is read. Click it to open Discord. See [Discord notifications](docs/Discord-Notifications.md).
+- **Update notices**: when a new release is out, a 🎁 row shows the new version. Click it to update in place. Right-click it to see what's new or skip that version.
 - **LINE**: a green LINE row shows how many LINE messages are unread. The number is LINE's own Dock badge count, so no permission is needed and no message is read. Click it to open LINE. Right-click it to hide it until the count rises. See [LINE notifications](docs/LINE-Notifications.md).
 - **Animations**: idle, running, reading, waiting, failed and waving, from the Codex pet sprite format. Drag Angeling and it runs along.
 - **Ragnarok emotes** (`/heh` `/lv` `/wah` `/omg` `/swt` `/slur`):
@@ -107,7 +108,7 @@ This builds the app with `swiftc` and takes the artwork from the latest release.
 
 ## Update
 
-Run the Quick start command again. From a git clone, use `git pull && ./install.sh`.
+Angeling checks GitHub for a new release at launch and every 6 hours. When one is out, a 🎁 row appears in the bubble: click it and Angeling updates itself, then reopens. You can also run the Quick start command again. From a git clone, use `git pull && ./install.sh`.
 
 ## Uninstall
 
@@ -134,7 +135,7 @@ Claude Code hooks ──► hooks/angeling-hook.sh ──► ~/.claude/angeling-
 - **Reminders** are stored in `~/.claude/angeling-pet/reminders.json` and linked to their Calendar events through EventKit.
 - **Discord** is polled every 3 s: only its Dock badge, through `lsappinfo`.
 - **LINE** is polled every 3 s: only its Dock badge, through `lsappinfo`.
-- **The app** is a single-file AppKit program. It uses no network, has no dependencies, and runs as an accessory app, so it has no Dock icon.
+- **The app** is a single-file AppKit program. Its only network call is the update check against the GitHub releases API, which can be turned off in the menu (อัปเดต → ตรวจอัตโนมัติ). It has no dependencies and runs as an accessory app, so it has no Dock icon.
 
 ## Artwork
 

@@ -71,6 +71,11 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 
 - จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app com.hnc.Discord` (ป้ายบนไอคอนใน Dock) ไม่ได้อ่านข้อความ
 
+## การอัปเดต
+
+- ตอนเปิดแอปและทุก 6 ชั่วโมง เรียก `https://api.github.com/repos/mobbenxd/angeling-pet/releases/latest` แล้วเทียบ `tag_name` กับเวอร์ชันของแอป (build จากซอร์สใช้ git tag ล่าสุด, ถ้าไม่มีจะเป็น `dev` ซึ่งไม่เตือน)
+- อัปเดตโดยรัน `get.sh` เบื้องหลัง เก็บ log ที่ `~/.claude/angeling-pet/update.log` ตัวติดตั้งจะปิดแอปตัวเก่าแล้วเปิดตัวใหม่
+
 ## LINE
 
 - จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app jp.naver.line.mac` (ป้ายบนไอคอนใน Dock) ไม่ได้อ่านข้อความ

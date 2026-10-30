@@ -12,6 +12,7 @@
 //   LINE row           unread count (Dock badge); click opens LINE
 //   Discord row        unread DMs + @mentions (Dock badge count); click opens Discord
 //   ⌥⌘R                set a reminder (also added to Calendar); Angeling chimes at the time
+//   update row         a newer GitHub release exists; click to install it
 import AppKit
 import Carbon.HIToolbox
 import EventKit
@@ -250,6 +251,61 @@ func dockBadge(_ bundle: String) -> String? {
     guard !text.isEmpty else { return nil }
     guard let r = text.range(of: #""label"="[^"]*""#, options: .regularExpression) else { return "" }
     return String(text[r].dropFirst(9).dropLast())
+}
+
+// MARK: - Updates
+//   Checks the latest GitHub release at launch and every 6 hours (the only network call Angeling
+//   makes; it can be turned off). Updating runs the one-line installer in the background: it
+//   replaces the app, quits this copy and opens the new one.
+
+enum Updater {
+    static let repo = "mobbenxd/angeling-pet"
+    static var current: String {
+        ProcessInfo.processInfo.environment["ANGELING_FAKE_VERSION"]
+            ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+    }
+    static let log = baseDir.appendingPathComponent("update.log")
+
+    /// "1.10.0" > "1.9.2"; false for anything that isn't a dotted number (e.g. "dev").
+    static func isNewer(_ a: String, than b: String) -> Bool {
+        func parts(_ v: String) -> [Int]? {
+            let p = v.trimmingCharacters(in: CharacterSet(charactersIn: "v")).split(separator: ".").map { Int($0) }
+            return p.isEmpty || p.contains(nil) ? nil : p.compactMap { $0 }
+        }
+        guard let x = parts(a), let y = parts(b) else { return false }
+        for i in 0..<max(x.count, y.count) {
+            let (l, r) = (i < x.count ? x[i] : 0, i < y.count ? y[i] : 0)
+            if l != r { return l > r }
+        }
+        return false
+    }
+
+    /// Latest release version (without the "v") and its page; nil on any failure.
+    static func fetchLatest(_ done: @escaping (String?, URL?) -> Void) {
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_LATEST_VERSION"] {
+            return done(fake, URL(string: "https://github.com/\(repo)/releases"))
+        }
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!, timeoutInterval: 15)
+        req.setValue("Angeling/\(current)", forHTTPHeaderField: "User-Agent")
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let tag = (json?["tag_name"] as? String).map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
+            let page = (json?["html_url"] as? String).flatMap(URL.init(string:))
+            DispatchQueue.main.async { done(tag, page) }
+        }.resume()
+    }
+
+    /// Runs the one-line installer detached, keeping the login item only if it is set up now.
+    static func install() {
+        let loginItem = FileManager.default.fileExists(atPath: home.appendingPathComponent("Library/LaunchAgents/local.angeling.pet.plist").path)
+        let cmd = ProcessInfo.processInfo.environment["ANGELING_UPDATE_CMD"]
+            ?? "curl -fsSL https://raw.githubusercontent.com/\(repo)/main/get.sh | bash -s --\(loginItem ? "" : " --no-login")"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/bash")
+        p.arguments = ["-c", "(\(cmd)) > '\(log.path)' 2>&1"]
+        try? p.run()
+    }
 }
 
 // MARK: - Reminders
@@ -722,6 +778,14 @@ final class PetController: NSObject, NSMenuDelegate {
         return f
     }()
     var lastChime: Double = 0
+    var latestVersion: String?
+    var releasePage: URL?
+    var updating = false
+    var autoUpdateCheck: Bool { flag("autoUpdateCheck") }
+    var updateAvailable: Bool {
+        guard let v = latestVersion else { return false }
+        return Updater.isNewer(v, than: Updater.current) && v != d.string(forKey: "skippedVersion")
+    }
     var reminderSound: String {
         let hasLevelUp = FileManager.default.fileExists(atPath: levelUpSound.path)
         let s = d.string(forKey: "reminderSound") ?? (hasLevelUp ? "levelup" : "Glass")
@@ -826,6 +890,8 @@ final class PetController: NSObject, NSMenuDelegate {
         pollLine()
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollLine() }
         reminders.syncWithCalendar()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.checkForUpdates(manual: false) }
+        Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.checkForUpdates(manual: false) }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.reminders.syncWithCalendar() }
     }
 
@@ -851,6 +917,71 @@ final class PetController: NSObject, NSMenuDelegate {
 
     var lineVisible: Bool { showLine && lineUnread > 0 && lineDismissed == nil }
     var discordVisible: Bool { showDiscord && discordUnread > 0 && discordDismissed == nil }
+
+    // MARK: updates
+
+    func checkForUpdates(manual: Bool) {
+        guard manual || autoUpdateCheck else { return }
+        Updater.fetchLatest { [weak self] v, page in
+            guard let self else { return }
+            let wasAvailable = self.updateAvailable
+            if let v { (self.latestVersion, self.releasePage) = (v, page) }
+            if self.updateAvailable && !wasAvailable && !manual { self.showEmote("lv", for: 3) }
+            self.refresh()
+            guard manual else { return }
+            let alert = NSAlert()
+            if v == nil {
+                alert.messageText = "ตรวจไม่ได้ตอนนี้"
+                alert.informativeText = "เชื่อมต่อ GitHub ไม่ได้ ลองใหม่อีกครั้งภายหลัง"
+            } else if Updater.isNewer(v!, than: Updater.current) {
+                alert.messageText = "มีเวอร์ชันใหม่ \(v!)"
+                alert.informativeText = "ตอนนี้ใช้ \(Updater.current) อยู่ อัปเดตเลยไหม?"
+                alert.addButton(withTitle: "อัปเดตเลย")
+                alert.addButton(withTitle: "ไว้ทีหลัง")
+            } else {
+                alert.messageText = "ใช้เวอร์ชันล่าสุดอยู่แล้ว"
+                alert.informativeText = "Angeling \(Updater.current) (ล่าสุดบน GitHub: \(v!))"
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn && v != nil && Updater.isNewer(v!, than: Updater.current) { self.runUpdate() }
+        }
+    }
+
+    @objc func checkUpdatesNow() { checkForUpdates(manual: true) }
+    @objc func runUpdate() {
+        guard !updating else { return }
+        updating = true
+        setOverride("jumping", for: 1.2)
+        refresh()
+        Updater.install() // the installer quits this copy and opens the new one
+    }
+    @objc func openReleasePage() { if let u = releasePage { NSWorkspace.shared.open(u) } }
+    @objc func skipVersion() { d.set(latestVersion, forKey: "skippedVersion"); refresh() }
+    @objc func toggleAutoUpdateCheck() {
+        d.set(!autoUpdateCheck, forKey: "autoUpdateCheck")
+        if autoUpdateCheck { checkForUpdates(manual: false) }
+    }
+
+    func updateRow(width w: CGFloat) -> RowView {
+        let gold = NSColor(calibratedRed: 0.8, green: 0.55, blue: 0.05, alpha: 1)
+        let t = NSMutableAttributedString(string: updating ? "🎁 กำลังอัปเดตเป็น \(latestVersion ?? "")…" : "🎁 มี Angeling เวอร์ชันใหม่ \(latestVersion ?? "")",
+                                          attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: gold])
+        t.append(NSAttributedString(string: "  (ตอนนี้ \(Updater.current))\n" + (updating ? "Angeling จะปิดแล้วเปิดใหม่เองในไม่กี่วินาที" : "คลิกเพื่ออัปเดต · คลิกขวาสำหรับตัวเลือก"),
+                                    attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor(calibratedWhite: 0.45, alpha: 1)]))
+        let r = RowView(text: t, width: w, clickable: !updating)
+        r.accent = gold
+        guard !updating else { return r }
+        r.onClick = { [weak self] in self?.runUpdate() }
+        r.onRightClick = { [weak self] e in
+            let m = NSMenu()
+            for (title, sel) in [("อัปเดตเลย", #selector(PetController.runUpdate)), ("ดูว่ามีอะไรใหม่", #selector(PetController.openReleasePage)),
+                                 ("ข้ามเวอร์ชันนี้", #selector(PetController.skipVersion))] {
+                m.addItem(withTitle: title, action: sel, keyEquivalent: "").target = self
+            }
+            NSMenu.popUpContextMenu(m, with: e, for: r)
+        }
+        return r
+    }
 
     // MARK: reminders
 
@@ -1087,6 +1218,10 @@ final class PetController: NSObject, NSMenuDelegate {
         } else {
             item(expanded ? "ย่อรายการ" : "ดูทุก session", #selector(toggleExpand))
         }
+        if updateAvailable && !updating {
+            item("🎁 อัปเดตเป็นเวอร์ชัน \(latestVersion ?? "")", #selector(runUpdate))
+            m.addItem(.separator())
+        }
         item("⏰ ตั้งเตือน… (⌥⌘R)", #selector(newReminder))
         let list = NSMenu()
         if reminders.items.isEmpty {
@@ -1121,6 +1256,13 @@ final class PetController: NSObject, NSMenuDelegate {
         item("แจ้งเตือน Discord", #selector(toggleDiscord), on: showDiscord)
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
         m.addItem(.separator())
+        let upd = NSMenu()
+        upd.addItem(withTitle: "Angeling \(Updater.current)", action: nil, keyEquivalent: "").isEnabled = false
+        upd.addItem(withTitle: "ตรวจหาเวอร์ชันใหม่ตอนนี้", action: #selector(checkUpdatesNow), keyEquivalent: "").target = self
+        let auto = upd.addItem(withTitle: "ตรวจอัตโนมัติ (ทุก 6 ชั่วโมง)", action: #selector(toggleAutoUpdateCheck), keyEquivalent: "")
+        auto.target = self
+        auto.state = autoUpdateCheck ? .on : .off
+        m.addItem(withTitle: "อัปเดต", action: nil, keyEquivalent: "").submenu = upd
         item("ปิด Angeling", #selector(quit))
         return m
     }
@@ -1342,7 +1484,8 @@ final class PetController: NSObject, NSMenuDelegate {
     func rowsSignature(_ live: [(SessionState, String)]) -> String {
         let now = Date().timeIntervalSince1970
         let idleQuiet = live.first.map { $0.1 == "idle" && now - ($0.0.updated ?? 0) > 60 } ?? true
-        let lineSig = (lineVisible ? "L\(lineUnread)" : "-")
+        let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)" : "")
+            + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
         return "\(expanded)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
@@ -1451,7 +1594,7 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
-        let lineRows = reminderRows(width: w) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
+        let lineRows = reminderRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
 
         if expanded {
             if live.isEmpty && lineRows.isEmpty {
@@ -1540,6 +1683,8 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     controller.refresh()
     if env["ANGELING_HOVER"] != nil { controller.toggle.isHidden = false }
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }
+    if env["ANGELING_LATEST_VERSION"] != nil || env["ANGELING_FAKE_VERSION"] != nil { controller.checkForUpdates(manual: false) }
+    if env["ANGELING_UPDATE_NOW"] != nil { controller.runUpdate() }
     if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
         let v = env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!

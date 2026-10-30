@@ -6,7 +6,10 @@ APP="${1:-$HOME/Applications/Angeling.app}"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O ${ANGELING_TARGET:+-target "$ANGELING_TARGET"} -o "$APP/Contents/MacOS/Angeling" "$ROOT/src/main.swift" -framework AppKit -framework Carbon -framework EventKit
-VERSION="${ANGELING_VERSION:-dev}"
+# Version: ANGELING_VERSION, else the latest git tag (so source builds get update notices), else "dev".
+TAG=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || true)
+VERSION="${ANGELING_VERSION:-${TAG#v}}"
+VERSION="${VERSION:-dev}"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
