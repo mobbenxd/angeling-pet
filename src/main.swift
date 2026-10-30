@@ -1974,10 +1974,6 @@ final class PetController: NSObject, NSMenuDelegate {
             alarmSound("Funk")?.play()
         }
 
-        // Menu bar: icon + count of sessions needing you.
-        let attention = live.filter { $0.1 == "waiting" || $0.1 == "failed" }.count
-        statusItem.button?.title = attention > 0 ? " \(attention)" : ""
-
         // Pet animation
         if let o = overrideAnim, Date() < overrideUntil {
             play(o)
@@ -2084,9 +2080,12 @@ final class PetController: NSObject, NSMenuDelegate {
         let showBubble = bubbleSize != .zero
         bubble.isHidden = !showBubble
         // "!" whenever a session needs you; otherwise the active count while the bubble is hidden.
+        let active = live.filter { ["failed", "running", "review"].contains($0.1) }.count
         badge.label = waiting.isEmpty ? nil : "!"
-        badge.count = !waiting.isEmpty ? waiting.count
-            : activityHidden ? live.filter { ["failed", "running", "review"].contains($0.1) }.count : 0
+        badge.count = !waiting.isEmpty ? waiting.count : activityHidden ? active : 0
+        // Menu bar: the same number as the badge, shown even while the bubble is open.
+        let count = waiting.isEmpty ? active : waiting.count
+        statusItem.button?.title = count > 0 ? " \(count)" : ""
 
         // Emote floats above the head (like in RO); the bubble moves up to make room for it.
         var emoteRect = NSRect.zero
