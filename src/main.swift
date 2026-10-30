@@ -77,6 +77,26 @@ final class SpriteSheet: Sprite {
     }
 }
 
+/// Extra Codex v2 pets in ~/.claude/angeling-pet/pets/<id>/ (pet.json + sheet), made by scripts/import-pet.swift.
+struct CodexPet: Decodable {
+    let id: String
+    let displayName: String
+    let spritesheetPath: String?
+    var sheetURL: URL { petsDir.appendingPathComponent(id).appendingPathComponent(spritesheetPath ?? "spritesheet.webp") }
+}
+
+let petsDir = baseDir.appendingPathComponent("pets")
+let codexPets: [CodexPet] = {
+    let fm = FileManager.default
+    guard let dirs = try? fm.contentsOfDirectory(at: petsDir, includingPropertiesForKeys: nil) else { return [] }
+    return dirs.compactMap { dir -> CodexPet? in
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("pet.json")),
+              let p = try? JSONDecoder().decode(CodexPet.self, from: data),
+              p.id == dir.lastPathComponent, p.id != "angeling", fm.fileExists(atPath: p.sheetURL.path) else { return nil }
+        return p
+    }.sorted { $0.displayName < $1.displayName }
+}()
+
 // MARK: - Bomber characters (assets/characters, made by scripts/import-characters.py)
 
 /// One frame: a rect on one of the character's sheets. Stored as [file, x, y, w, h].
@@ -1340,7 +1360,8 @@ final class PetController: NSObject, NSMenuDelegate {
 
     /// The chosen character's artwork; Angeling when it is "angeling" or its files are gone.
     static func sprite(_ id: String, angeling: SpriteSheet) -> Sprite {
-        bomberCharacters.first { $0.id == id }.flatMap { BomberSprite($0) } ?? angeling
+        if let p = codexPets.first(where: { $0.id == id }), let s = SpriteSheet(url: p.sheetURL) { return s }
+        return bomberCharacters.first { $0.id == id }.flatMap { BomberSprite($0) } ?? angeling
     }
 
     /// Switch to the chosen theme ("auto" follows macOS light / dark, so this runs every refresh).
@@ -1832,11 +1853,15 @@ final class PetController: NSObject, NSMenuDelegate {
             i.target = self; i.representedObject = id; i.state = themeChoice == id ? .on : .off
         }
         m.addItem(withTitle: "ธีม", action: nil, keyEquivalent: "").submenu = themes
-        if !bomberCharacters.isEmpty {
+        if !bomberCharacters.isEmpty || !codexPets.isEmpty {
             let chars = NSMenu()
-            for (id, title) in [("angeling", "Angeling")] + bomberCharacters.map({ ($0.id, $0.name) }) {
-                let i = chars.addItem(withTitle: title, action: #selector(setCharacter(_:)), keyEquivalent: "")
-                i.target = self; i.representedObject = id; i.state = PetController.characterChoice == id ? .on : .off
+            // Angeling and the other Codex pets, then the Bomber characters.
+            for group in [[("angeling", "Angeling")] + codexPets.map({ ($0.id, $0.displayName) }), bomberCharacters.map({ ($0.id, $0.name) })] where !group.isEmpty {
+                if chars.numberOfItems > 0 { chars.addItem(.separator()) }
+                for (id, title) in group {
+                    let i = chars.addItem(withTitle: title, action: #selector(setCharacter(_:)), keyEquivalent: "")
+                    i.target = self; i.representedObject = id; i.state = PetController.characterChoice == id ? .on : .off
+                }
             }
             m.addItem(withTitle: "ตัวละคร", action: nil, keyEquivalent: "").submenu = chars
         }

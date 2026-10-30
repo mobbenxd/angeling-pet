@@ -53,6 +53,13 @@ if [ -s "$ROOT/assets/characters/characters.json" ]; then
   rm -rf "$RUNTIME/characters"
   cp -R "$ROOT/assets/characters" "$RUNTIME/characters"
 fi
+# Replace only the pets we ship, so pets added by hand stay.
+for pet in "$ROOT"/assets/pets/*/; do
+  [ -f "$pet/pet.json" ] || continue
+  mkdir -p "$RUNTIME/pets"
+  rm -rf "$RUNTIME/pets/$(basename "$pet")"
+  cp -R "$pet" "$RUNTIME/pets/$(basename "$pet")"
+done
 
 echo "==> Claude Code"
 CLAUDE=0

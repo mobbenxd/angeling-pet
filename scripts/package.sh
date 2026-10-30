@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build the release files into dist/:
 #   Angeling.zip                ready-to-install bundle: prebuilt universal app + artwork + scripts
-#   spritesheet.webp, emote-*.gif, levelup.mp3, characters.zip
+#   spritesheet.webp, emote-*.gif, levelup.mp3, characters.zip, pets.zip
 #                               the artwork alone, for installs from a git clone
 # Publish with:  gh release create vX.Y.Z dist/* --title ... --notes ...
 set -euo pipefail
@@ -33,6 +33,8 @@ cp "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/LICENSE" "$ROOT/README.md" "$S
 cp "$ROOT/assets/spritesheet.webp" "$ROOT/assets/sounds/levelup.mp3" "$DIST/"
 [ -s "$ROOT/assets/characters/characters.json" ] || { echo "assets/characters is missing; run scripts/import-characters.py" >&2; exit 1; }
 (cd "$ROOT/assets/characters" && zip -qX "$DIST/characters.zip" characters.json *.png)
+ls "$ROOT"/assets/pets/*/pet.json >/dev/null 2>&1 || { echo "assets/pets is missing; run scripts/import-pet.swift" >&2; exit 1; }
+(cd "$ROOT/assets/pets" && zip -qXr "$DIST/pets.zip" . -x '.*' '*/.*')
 for f in "$ROOT"/assets/emotes/*.gif; do cp "$f" "$DIST/emote-$(basename "$f")"; done
 echo "App architectures: $(lipo -archs "$STAGE/Angeling.app/Contents/MacOS/Angeling")"
 rm -rf "$DIST/stage"
