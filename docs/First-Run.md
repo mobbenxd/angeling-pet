@@ -9,9 +9,11 @@
 
 รายละเอียดดูที่ [ตั้งเตือน](Reminders.md)
 
-## 2. ถ้าใช้ LINE
+## 2. ถ้าใช้ LINE หรือ Discord
 
 เปิดแอป LINE ไว้ แถว 💬 LINE จะบอกจำนวนข้อความที่ยังไม่อ่าน ถ้าอยากเห็นข้อความด้วย ดู [แจ้งเตือน LINE](LINE-Notifications.md)
+
+เปิดแอป Discord ไว้ แถว 🎮 Discord จะบอกจำนวน DM และ @mention ที่ยังไม่อ่าน ดู [แจ้งเตือน Discord](Discord-Notifications.md)
 
 ## 3. ถ้าใช้ Claude Code: ให้ทำงานสักอย่าง
 

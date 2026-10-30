@@ -67,6 +67,10 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 - ซิงก์กับปฏิทินเมื่อ EventKit แจ้งว่ามีการเปลี่ยนแปลง และทุก 60 วินาที: ถ้า event ถูกย้าย เวลาเตือนจะย้ายตาม ถ้าถูกลบ การเตือนจะถูกยกเลิก (เฉพาะการเตือนที่ยังไม่ดัง)
 - ตรวจทุก 0.5 วินาทีพร้อมกับ state ของ session
 
+## Discord
+
+- จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app com.hnc.Discord` (ป้ายบนไอคอนใน Dock) ไม่ได้อ่านข้อความ
+
 ## LINE
 
 - จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app jp.naver.line.mac`

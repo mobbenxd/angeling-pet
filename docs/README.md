@@ -3,6 +3,7 @@
 **Angeling** คือเพ็ตลอยบนเดสก์ท็อป macOS ที่:
 - **ช่วยตั้งเตือน:** บันทึกลงปฏิทิน และเตือนด้วยเสียง Level Up ของ Ragnarok เมื่อถึงเวลา
 - **บอกข้อความ LINE** ที่ยังไม่อ่าน พร้อมข้อความล่าสุด
+- **บอกจำนวนข้อความ Discord** ที่ยังไม่อ่าน (DM และ @mention)
 - **รายงานงานของ Claude Code** ว่าแต่ละ session กำลังทำอะไร อันไหนรอคุณ อันไหนเสร็จแล้ว คลิกเพื่อไปที่ session นั้นได้ (ไม่มี Claude Code ก็ใช้ฟีเจอร์อื่นได้)
 
 ติดตั้งด้วยคำสั่งเดียว (วางใน Terminal):
@@ -28,6 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh |
 | [วิธีใช้งาน](Usage.md) | คลิก ลาก ซ่อน เมนู และคีย์ลัด |
 | [บับเบิลกิจกรรมและสถานะ](Activity-Bubble.md) | อยากรู้ว่าแต่ละแถว สี และไอคอนหมายถึงอะไร |
 | [ตั้งเตือน](Reminders.md) | อยากให้ Angeling เตือนนัดหรืองาน พร้อมบันทึกลงปฏิทิน |
+| [แจ้งเตือน Discord](Discord-Notifications.md) | อยากรู้ว่ามี DM ใน Discord ที่ยังไม่อ่านกี่ข้อความ |
 | [แจ้งเตือน LINE](LINE-Notifications.md) | อยากให้แสดงข้อความ LINE ที่ยังไม่อ่าน |
 | [Emote และท่าทาง](Emotes-and-Animations.md) | อยากรู้ว่า Angeling ทำท่าไหนเมื่อไร |
 | [เปลี่ยนเป็นเพ็ตตัวอื่น](Custom-Pet.md) | อยากใช้ sprite ของเพ็ต Codex ตัวอื่น |

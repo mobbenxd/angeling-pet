@@ -10,6 +10,7 @@
 //   menu bar icon      always there; shows/hides Angeling, lists sessions
 //   ⌥⌘A                show / hide Angeling
 //   LINE row           unread total + latest message; click opens LINE
+//   Discord row        unread DMs + @mentions (Dock badge count); click opens Discord
 //   ⌥⌘R                set a reminder (also added to Calendar); Angeling chimes at the time
 import AppKit
 import Carbon.HIToolbox
@@ -125,6 +126,7 @@ func priority(_ st: String) -> Int {
 }
 
 let alarmOrange = NSColor(calibratedRed: 0.93, green: 0.48, blue: 0.08, alpha: 1)
+let discordBlurple = NSColor(calibratedRed: 0.35, green: 0.4, blue: 0.95, alpha: 1)
 let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
 let lineTime: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
 let icons: [String: String] = ["waiting": "🙋", "failed": "😣", "running": "⚙️", "review": "🔍", "done": "✨", "idle": "💤"]
@@ -222,22 +224,9 @@ enum LineWatch {
         return s
     }
 
-    /// Dock badge of the running LINE app, e.g. `"StatusLabel"={ "label"="676" }`.
     static func badgeCount() -> Int? {
         if let fake = ProcessInfo.processInfo.environment["ANGELING_LINE_UNREAD"] { return Int(fake) }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/lsappinfo")
-        p.arguments = ["info", "-only", "StatusLabel", "-app", bundle]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        let text = String(decoding: data, as: UTF8.self)
-        guard !text.isEmpty else { return nil } // LINE not running
-        guard let r = text.range(of: #""label"="[^"]*""#, options: .regularExpression) else { return 0 }
-        return Int(text[r].filter(\.isNumber)) ?? 0
+        return dockBadge(bundle).map { Int($0.filter(\.isNumber)) ?? 0 }
     }
 
     /// Newest LINE notification still in Notification Center; nil when the database can't be opened.
@@ -269,6 +258,44 @@ enum LineWatch {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
     }
+}
+
+// MARK: - Discord
+//   Unread count = Discord's Dock badge (lsappinfo; no permission needed, Discord must be running).
+//   The number counts direct messages and @mentions; a plain "•" (unread server chatter) is ignored.
+//   No message is ever read.
+
+enum DiscordWatch {
+    static let bundle = "com.hnc.Discord"
+
+    static func unread() -> Int {
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_DISCORD_UNREAD"] { return Int(fake) ?? 0 }
+        return dockBadge(bundle).flatMap { Int($0.filter(\.isNumber)) } ?? 0
+    }
+
+    static func open() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+}
+
+/// Dock badge text of a running app ("" when it has none), e.g. `"StatusLabel"={ "label"="676" }`;
+/// nil when the app is not running.
+func dockBadge(_ bundle: String) -> String? {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/lsappinfo")
+    p.arguments = ["info", "-only", "StatusLabel", "-app", bundle]
+    let out = Pipe()
+    p.standardOutput = out
+    p.standardError = FileHandle.nullDevice
+    guard (try? p.run()) != nil else { return nil }
+    let data = out.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    let text = String(decoding: data, as: UTF8.self)
+    guard !text.isEmpty else { return nil }
+    guard let r = text.range(of: #""label"="[^"]*""#, options: .regularExpression) else { return "" }
+    return String(text[r].dropFirst(9).dropLast())
 }
 
 // MARK: - Reminders
@@ -731,6 +758,9 @@ final class PetController: NSObject, NSMenuDelegate {
     let lineBadge = BadgeView(frame: .zero)
     var line = LineStatus()
     var lineDismissed: (Int, Double)?  // (unread, latest date) when the LINE row was hidden
+    let discordBadge = BadgeView(frame: .zero)
+    var discordUnread = 0
+    var discordDismissed: Int?  // unread count when the Discord row was hidden
     let reminders = ReminderStore()
     lazy var reminderForm: ReminderForm = {
         let f = ReminderForm(store: reminders)
@@ -772,6 +802,7 @@ final class PetController: NSObject, NSMenuDelegate {
     var showText: Bool { flag("showText") }
     var showPlan: Bool { flag("showPlan") }
     var showLine: Bool { flag("showLine") }
+    var showDiscord: Bool { flag("showDiscord") }
 
     let d = UserDefaults.standard
     var activityHidden: Bool { get { d.bool(forKey: "activityHidden") } set { d.set(newValue, forKey: "activityHidden") } }
@@ -803,6 +834,9 @@ final class PetController: NSObject, NSMenuDelegate {
         content.addSubview(lineBadge)
         lineBadge.color = lineGreen
         lineBadge.toolTip = "LINE ยังไม่อ่าน"
+        content.addSubview(discordBadge)
+        discordBadge.color = discordBlurple
+        discordBadge.toolTip = "Discord ยังไม่อ่าน (DM และ @mention)"
         content.addSubview(toggle)
         bubble.onClick = { [weak self] in self?.clicked() }
         emote.animates = true
@@ -841,7 +875,21 @@ final class PetController: NSObject, NSMenuDelegate {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.reminders.syncWithCalendar() }
     }
 
+    /// Polls LINE and Discord (every 3 s, off the main thread).
     func pollLine() {
+        let wantDiscord = showDiscord
+        DispatchQueue.global(qos: .utility).async {
+            let n = wantDiscord ? DiscordWatch.unread() : 0
+            DispatchQueue.main.async { [weak self] in
+                guard let self, n != self.discordUnread else { return }
+                if n > self.discordUnread {
+                    if self.didFirstRefresh { self.showEmote("heh", for: 2.5) }
+                    self.discordDismissed = nil // something new: bring the row back
+                }
+                self.discordUnread = n
+                self.refresh()
+            }
+        }
         guard showLine else { if line != LineStatus() { line = LineStatus(); refresh() }; return }
         DispatchQueue.global(qos: .utility).async {
             let s = LineWatch.poll()
@@ -856,6 +904,7 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     var lineVisible: Bool { showLine && line.unread > 0 && lineDismissed == nil }
+    var discordVisible: Bool { showDiscord && discordUnread > 0 && discordDismissed == nil }
 
     // MARK: reminders
 
@@ -1124,6 +1173,7 @@ final class PetController: NSObject, NSMenuDelegate {
         item("โผล่ออกมาเมื่อมีงานรอคุณ", #selector(togglePop), on: popWhenWaiting)
         item("แจ้งเตือน LINE", #selector(toggleLine), on: showLine)
         if showLine && !line.canReadMessages { item("ให้สิทธิ์ Full Disk Access เพื่ออ่านข้อความ LINE…", #selector(openFullDiskAccess)) }
+        item("แจ้งเตือน Discord", #selector(toggleDiscord), on: showDiscord)
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
         m.addItem(.separator())
         item("ปิด Angeling", #selector(quit))
@@ -1168,6 +1218,9 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     @objc func openLine() { setOverride("waving", for: 0.8); LineWatch.open() }
     @objc func dismissLine() { lineDismissed = (line.unread, line.date); refresh() }
+    @objc func toggleDiscord() { d.set(!showDiscord, forKey: "showDiscord"); discordDismissed = nil; pollLine(); refresh() }
+    @objc func openDiscord() { setOverride("waving", for: 0.8); DiscordWatch.open() }
+    @objc func dismissDiscord() { discordDismissed = discordUnread; refresh() }
     @objc func clearDone() {
         let now = Date().timeIntervalSince1970
         for s in loadSessions() where ["done", "idle"].contains(effective(s, now: now)) {
@@ -1332,6 +1385,9 @@ final class PetController: NSObject, NSMenuDelegate {
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
         lineBadge.count = activityHidden && showLine ? line.unread : 0
         lineBadge.frame = NSRect(x: pet.frame.minX - lineBadge.width + 16, y: pet.frame.maxY - 22, width: lineBadge.width, height: 18)
+        discordBadge.count = activityHidden && showDiscord ? discordUnread : 0
+        let discordY = lineBadge.count > 0 ? pet.frame.maxY - 42 : pet.frame.maxY - 22  // stacks under LINE's
+        discordBadge.frame = NSRect(x: pet.frame.minX - discordBadge.width + 16, y: discordY, width: discordBadge.width, height: 18)
         toggle.frame = NSRect(x: pet.frame.minX - 32, y: 22, width: 28, height: 22)
         toggle.shown = !activityHidden
         emote.frame = emoteRect
@@ -1344,7 +1400,8 @@ final class PetController: NSObject, NSMenuDelegate {
     func rowsSignature(_ live: [(SessionState, String)]) -> String {
         let now = Date().timeIntervalSince1970
         let idleQuiet = live.first.map { $0.1 == "idle" && now - ($0.0.updated ?? 0) > 60 } ?? true
-        let lineSig = lineVisible ? "\(line.unread)|\(line.date)|\(line.title)|\(line.body)|\(line.canReadMessages)" : "-"
+        let lineSig = (lineVisible ? "\(line.unread)|\(line.date)|\(line.title)|\(line.body)|\(line.canReadMessages)" : "-")
+            + (discordVisible ? "|D\(discordUnread)" : "")
         return "\(expanded)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
@@ -1448,7 +1505,24 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
-        let lineRows = reminderRows(width: w) + (lineVisible ? [lineRow()] : [])
+        func discordRow() -> RowView {
+            let out = NSMutableAttributedString(string: "🎮 Discord", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: discordBlurple])
+            out.append(NSAttributedString(string: "  ยังไม่อ่าน \(discordUnread) ข้อความ (DM / @mention)", attributes: dim))
+            let r = RowView(text: out, width: w, clickable: true)
+            r.accent = discordBlurple
+            r.toolTip = "คลิกเพื่อเปิด Discord · คลิกขวาเพื่อซ่อน"
+            r.onClick = { [weak self] in self?.openDiscord() }
+            r.onRightClick = { [weak self] e in
+                let m = NSMenu()
+                for (title, sel) in [("เปิด Discord", #selector(PetController.openDiscord)), ("ซ่อนจนกว่าจะมีข้อความใหม่", #selector(PetController.dismissDiscord)),
+                                     ("ปิดแจ้งเตือน Discord", #selector(PetController.toggleDiscord))] {
+                    m.addItem(withTitle: title, action: sel, keyEquivalent: "").target = self
+                }
+                NSMenu.popUpContextMenu(m, with: e, for: r)
+            }
+            return r
+        }
+        let lineRows = reminderRows(width: w) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
 
         if expanded {
             if live.isEmpty && lineRows.isEmpty {
@@ -1533,6 +1607,7 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     controller.activityHidden = env["ANGELING_HIDE_ACTIVITY"] != nil
     if env["ANGELING_EXPANDED"] != nil { controller.expanded = true }
     controller.line = LineWatch.poll()
+    controller.discordUnread = DiscordWatch.unread()
     controller.refresh()
     if env["ANGELING_HOVER"] != nil { controller.toggle.isHidden = false }
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }
