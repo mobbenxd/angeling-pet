@@ -26,7 +26,7 @@
 | iTerm2 | เลือก session นั้น |
 | kitty | เลือกหน้าต่างของ session นั้น (ต้องเปิด remote control ดูด้านล่าง) |
 | herdr | สลับ herdr ไปที่ pane ของ session นั้น แล้วเรียก terminal ที่เปิด herdr อยู่ขึ้นมา |
-| VS Code / Cursor / Windsurf | เปิดหน้าต่างของโฟลเดอร์นั้น |
+| VS Code / Cursor / Windsurf | สลับไปหน้าต่างที่เปิด session นั้นอยู่ แล้วไปที่แท็บของ session ใน Claude extension ถ้าหาหน้าต่างไม่เจอจะแค่เรียกแอปขึ้นมา ไม่เปิดหน้าต่างใหม่ |
 | อื่นๆ | เรียกแอปนั้นขึ้นมา |
 
 ครั้งแรกที่สลับแท็บใน Terminal หรือ iTerm macOS อาจถามว่า Angeling ควบคุมแอปนั้นได้ไหม (Automation) ให้กด **OK**

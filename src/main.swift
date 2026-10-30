@@ -211,6 +211,7 @@ struct SessionState: Decodable {
     let herdrSock: String?
     let kittyWin: String?    // KITTY_WINDOW_ID when the session runs straight in kitty
     let kittyListen: String? // KITTY_LISTEN_ON (set only when kitty.conf has listen_on)
+    let root: String?        // CLAUDE_PROJECT_DIR: where the session started, unlike cwd it never moves
 }
 
 func loadSessions() -> [SessionState] {
@@ -413,15 +414,47 @@ enum Focus {
             """)
         } else if ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.exafunction.windsurf"].contains(app)
                     || s.term == "vscode", let cwd = s.cwd {
-            // Re-opening the folder focuses the window that already has it.
             let bid = app.isEmpty ? "com.microsoft.VSCode" : app
-            run("/usr/bin/open", ["-b", bid, cwd])
+            // The project root, not cwd: a session can move into a folder that another window holds.
+            if let folder = ideWindowFolder(bundle: bid, path: s.root ?? cwd) {
+                // Re-opening a window's own folder focuses it; any other folder would open a new window.
+                run("/usr/bin/open", ["-b", bid, folder])
+                // Claude's extension reveals the session's tab, or resumes a copy if the URI lands in
+                // another window, so it has to follow the focus. Sessions in the IDE's terminal have
+                // a TERM_PROGRAM and no tab.
+                if s.term == nil, let id = s.session, let scheme = ideSchemes[bid] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        openURL("\(scheme)://anthropic.claude-code/open?session=\(id)")
+                    }
+                }
+            } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            }
         } else if !app.isEmpty, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
     }
 
     static let kittyBundle = "net.kovidgoyal.kitty"
+    static let ideSchemes = ["com.microsoft.VSCode": "vscode", "com.todesktop.230313mzl4w4u92": "cursor", "com.exafunction.windsurf": "windsurf"]
+
+    /// Root folder of the open IDE window holding `path`, from the lock file Claude's extension keeps
+    /// per window in ~/.claude/ide. A dead pid drops stale locks. Multi-root windows are skipped:
+    /// opening one of their folders would start a new window.
+    static func ideWindowFolder(bundle: String, path: String) -> String? {
+        struct Lock: Decodable { let pid: Int32; let workspaceFolders: [String] }
+        let files = (try? FileManager.default.contentsOfDirectory(at: home.appendingPathComponent(".claude/ide"), includingPropertiesForKeys: nil)) ?? []
+        let target = path.lowercased() + "/"
+        var best: String?
+        for f in files where f.pathExtension == "lock" {
+            guard let data = try? Data(contentsOf: f), let lock = try? JSONDecoder().decode(Lock.self, from: data),
+                  lock.workspaceFolders.count == 1, let folder = lock.workspaceFolders.first,
+                  NSRunningApplication(processIdentifier: lock.pid)?.bundleIdentifier == bundle,
+                  target.hasPrefix(folder.lowercased() + "/"), folder.count > (best?.count ?? 0) else { continue }
+            best = folder
+        }
+        return best
+    }
 
     /// A local herdr client and the GUI app it runs in: walk up from each `herdr` process until an
     /// ancestor is a regular app. Skips the server and `herdr --remote` (another machine's herdr).

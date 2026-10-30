@@ -55,7 +55,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Click to jump**:
   - Click a row to open that session.
   - Click Angeling to open the latest active session.
-  - Works for the Claude desktop app (via deep link), Terminal and iTerm2 (selects the right tab), kitty (selects the right window), [herdr](https://herdr.dev) (switches to the pane, then raises the terminal showing it), and VS Code, Cursor and Windsurf (focuses the window for that folder).
+  - Works for the Claude desktop app (via deep link), Terminal and iTerm2 (selects the right tab), kitty (selects the right window), [herdr](https://herdr.dev) (switches to the pane, then raises the terminal showing it), and VS Code, Cursor and Windsurf (focuses the window that holds the session, then its tab in Claude's extension; never opens a new window).
 - **Hide**:
   - Hover Angeling to reveal a button that hides or shows the bubble. A red badge shows the number of active sessions while it is hidden.
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.

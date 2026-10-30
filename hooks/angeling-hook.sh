@@ -52,6 +52,7 @@ echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
   --arg term "${TERM_PROGRAM:-}" --arg tty "$TTY_NAME" --arg iterm "${ITERM_SESSION_ID:-}" \
   --arg herdr "${HERDR_PANE_ID:-}" --arg herdrBin "${HERDR_BIN_PATH:-}" --arg herdrSock "${HERDR_SOCKET_PATH:-}" \
   --arg kittyWin "${KITTY_WINDOW_ID:-}" --arg kittyListen "${KITTY_LISTEN_ON:-}" \
+  --arg root "${CLAUDE_PROJECT_DIR:-}" \
   --argjson prevobj "$PREV_JSON" '
   def short(n): tostring | gsub("\\[(?<t>[^\\]]*)\\]\\([^)]*\\)"; "\(.t)") | gsub("\\*\\*|`|^#+ "; "") | gsub("[\\n\\r\\t]+"; " ") | if length > n then .[0:n] + "…" else . end;
   def base: tostring | split("/") | last;
@@ -83,7 +84,8 @@ echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
       herdrBin: (if $herdrBin != "" then $herdrBin else $p.herdrBin end),
       herdrSock: (if $herdrSock != "" then $herdrSock else $p.herdrSock end),
       kittyWin: (if $kittyWin != "" then $kittyWin else $p.kittyWin end),
-      kittyListen: (if $kittyListen != "" then $kittyListen else $p.kittyListen end)
+      kittyListen: (if $kittyListen != "" then $kittyListen else $p.kittyListen end),
+      root: (if $root != "" then $root else $p.root end)
     }
   + ( if .hook_event_name == "SessionStart" then {state: "idle", text: "พร้อมแล้ว~"}
       elif .hook_event_name == "UserPromptSubmit" then
