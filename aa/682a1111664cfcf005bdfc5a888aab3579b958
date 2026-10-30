@@ -1,0 +1,36 @@
+docs/LINE-Notifications.md
+  s_dac10d5edeebbd::t_5870a2b0a883c4 3,5,9,16-17,25
+docs/README.md
+  s_dac10d5edeebbd::t_97c5182942a86a 5
+docs/Updating-and-Uninstalling.md
+  s_dac10d5edeebbd::t_97c5182942a86a 21,41
+src/main.swift
+  s_dac10d5edeebbd::t_f2db36e4350ce2 12,198-200,204-207,713-714,832,834,836-837,839-842,844,846,852,1162,1328,1345,1421-1422,1425,1538
+  s_dac10d5edeebbd::t_5c43fe1ebdf3ef 130,273
+docs/Requirements.md
+  s_dac10d5edeebbd::t_97c5182942a86a 18
+scripts/build.sh
+  s_dac10d5edeebbd::t_f2db36e4350ce2 8
+README.md
+  s_dac10d5edeebbd::t_97c5182942a86a 6,26,66,86,136
+install.sh
+  s_dac10d5edeebbd::t_97c5182942a86a 71
+docs/How-It-Works.md
+  s_dac10d5edeebbd::t_ca8ce3d58e8df5 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aa682a1111664cfcf005bdfc5a888aab3579b958",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
