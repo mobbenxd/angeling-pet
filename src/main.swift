@@ -236,7 +236,9 @@ func effective(_ s: SessionState, now: Double) -> String {
     case "running", "review": return age > 600 ? "idle" : s.state!
     case "failed": return age > 20 ? "running" : "failed"
     case "done": return age > 1800 ? "idle" : "done"
-    case "waiting": return "waiting"
+    // Hold the alert briefly: someone already on that session answers first. Which window is in
+    // front needs Accessibility, and these sessions often share one app.
+    case "waiting": return age > 5 ? "waiting" : "running"
     default: return "idle"
     }
 }
