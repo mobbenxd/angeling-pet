@@ -18,7 +18,7 @@ cd ~/apps/angeling-pet && git pull && ./install.sh
 
 ดูว่าตอนนี้ใช้เวอร์ชันไหน: `defaults read ~/Applications/Angeling.app/Contents/Info CFBundleShortVersionString`
 
-> หลังอัปเดต ต้องให้สิทธิ์ **Full Disk Access** สำหรับ[แจ้งเตือน LINE](LINE-Notifications.md)ใหม่ และ macOS อาจถามสิทธิ์ปฏิทินสำหรับ[การเตือน](Reminders.md)ซ้ำ เพราะแอปเวอร์ชันใหม่ถือเป็นแอปใหม่
+> หลังอัปเดต macOS อาจถามสิทธิ์ปฏิทินสำหรับ[การเตือน](Reminders.md)ซ้ำ เพราะแอปเวอร์ชันใหม่ถือเป็นแอปใหม่
 
 ## ถอนการติดตั้ง
 
@@ -38,7 +38,7 @@ cd ~/apps/angeling-pet && git pull && ./install.sh
 ~/.claude/angeling-pet/uninstall.sh --purge
 ```
 
-ถ้าเคยให้ Full Disk Access หรือสิทธิ์ปฏิทิน ให้ลบ Angeling ออกจากรายการใน System Settings → Privacy & Security ด้วย
+ถ้าเคยให้สิทธิ์ปฏิทิน ให้ลบ Angeling ออกจากรายการใน System Settings → Privacy & Security → Calendars ด้วย
 
 ---
 [← สารบัญคู่มือ](README.md)

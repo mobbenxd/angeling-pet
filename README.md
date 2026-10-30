@@ -3,7 +3,7 @@
 A floating macOS desktop pet. Angeling, a little pink angel from Ragnarok Online, sits in a corner of your screen and:
 
 - **reminds you** of things at the time you set (with the Ragnarok level-up sound) and puts them in your Calendar;
-- **shows your LINE unread count** and the latest message;
+- **shows your LINE unread count** (from LINE's Dock badge; no message is read);
 - **shows your Discord unread count** (DMs and @mentions, from Discord's Dock badge; no message is read);
 - **reports your [Claude Code](https://claude.com/claude-code) sessions**, in the spirit of the Codex desktop pet: what each one is doing, which ones need you, and which ones have finished. Click to jump to a session.
 
@@ -23,7 +23,7 @@ You need macOS 13 or later. No Xcode, git or Homebrew is needed.
 3. Wait about 10 seconds for `Done!`. Angeling appears in the bottom-right corner and will start at every login.
 4. Press **⌥⌘R** to set your first reminder. Click **Allow Full Access** when macOS asks about Calendar.
 
-Optional: grant Full Disk Access to see LINE message text ([guide](docs/LINE-Notifications.md)). If you use Claude Code, it's picked up automatically. **⌥⌘A** shows or hides Angeling, and right-clicking it opens the menu.
+If you use Claude Code, it's picked up automatically. **⌥⌘A** shows or hides Angeling, and right-clicking it opens the menu.
 
 ### ติดตั้ง (ภาษาไทย)
 
@@ -63,10 +63,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
 - **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
 - **Discord**: a purple Discord row shows how many DMs and @mentions are unread. The number is Discord's own Dock badge count, so no permission is needed and no message is read. Click it to open Discord. See [Discord notifications](docs/Discord-Notifications.md).
-- **LINE notifications**: a green LINE row at the top of the bubble shows the total number of unread LINE messages and the latest message (sender, chat and time). Click it to open LINE. Right-click it to hide it until the next new message. While the bubble is hidden, a green badge on Angeling shows the unread total. Turn it off with **แจ้งเตือน LINE** in the menu.
-  - The unread total comes from LINE's Dock badge and needs no permission, but LINE must be running.
-  - The latest message is read from the macOS Notification Center database, which needs **Full Disk Access** for `~/Applications/Angeling.app` (System Settings → Privacy & Security → Full Disk Access). Without it, the row shows only the count. LINE notifications must be turned on, and message previews must be on to see the text.
-  - Angeling is ad-hoc signed, so you must grant Full Disk Access again after each rebuild or reinstall.
+- **LINE**: a green LINE row shows how many LINE messages are unread. The number is LINE's own Dock badge count, so no permission is needed and no message is read. Click it to open LINE. Right-click it to hide it until the count rises. See [LINE notifications](docs/LINE-Notifications.md).
 - **Animations**: idle, running, reading, waiting, failed and waving, from the Codex pet sprite format. Drag Angeling and it runs along.
 - **Ragnarok emotes** (`/heh` `/lv` `/wah` `/omg` `/swt` `/slur`):
 
@@ -86,7 +83,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 | macOS 13 or later | everything | Apple silicon or Intel |
 | [Claude Code](https://claude.com/claude-code) | session reports (optional) | Install it before Angeling, or run the installer again afterwards |
 | `jq` | session reports (optional) | Built into macOS 15+. On macOS 13–14: `brew install jq` |
-| LINE for Mac | LINE row (optional) | Full Disk Access shows the message text; see [LINE notifications](docs/LINE-Notifications.md) |
+| LINE / Discord for Mac | unread counts (optional) | Must be running; no permission needed |
 | Xcode Command Line Tools | building from source only | `xcode-select --install` |
 
 ## Install
@@ -136,7 +133,7 @@ Claude Code hooks ──► hooks/angeling-hook.sh ──► ~/.claude/angeling-
   Writes are locked per session, so parallel tool calls can't corrupt a file. It takes about 50–80 ms per event.
 - **Reminders** are stored in `~/.claude/angeling-pet/reminders.json` and linked to their Calendar events through EventKit.
 - **Discord** is polled every 3 s: only its Dock badge, through `lsappinfo`.
-- **LINE** is polled every 3 s, read-only: the Dock badge comes from `lsappinfo`, and the newest `jp.naver.line.mac` record comes from `~/Library/Group Containers/group.com.apple.usernoted/db2/db`.
+- **LINE** is polled every 3 s: only its Dock badge, through `lsappinfo`.
 - **The app** is a single-file AppKit program. It uses no network, has no dependencies, and runs as an accessory app, so it has no Dock icon.
 
 ## Artwork

@@ -73,8 +73,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 
 ## LINE
 
-- จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app jp.naver.line.mac`
-- ข้อความล่าสุด: อ่าน record ล่าสุดของ `jp.naver.line.mac` จาก `~/Library/Group Containers/group.com.apple.usernoted/db2/db` (SQLite แบบอ่านอย่างเดียว ข้อมูลเป็น binary plist ใช้คีย์ `req.titl` / `req.subt` / `req.body`)
+- จำนวนที่ยังไม่อ่าน: `lsappinfo info -only StatusLabel -app jp.naver.line.mac` (ป้ายบนไอคอนใน Dock) ไม่ได้อ่านข้อความ
 
 ---
 [← สารบัญคู่มือ](README.md)

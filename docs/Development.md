@@ -42,7 +42,6 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_DISCORD_UNREAD=4` | จำลองจำนวน Discord ที่ยังไม่อ่าน |
 | `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
 | `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
-| `ANGELING_NOTIF_DB=/path/db` | ใช้ฐานข้อมูลแจ้งเตือนจำลอง |
 
 ## ทดสอบ hook
 

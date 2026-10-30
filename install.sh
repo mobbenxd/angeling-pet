@@ -68,7 +68,7 @@ if [ -f "$SETTINGS" ] || command -v claude >/dev/null || [ -d "$HOME/.claude/pro
     CLAUDE=1
   fi
 else
-  echo "    not installed, so the session hook was skipped. Reminders and LINE work without it."
+  echo "    not installed, so the session hook was skipped. Reminders, LINE and Discord work without it."
   echo "    Installed Claude Code later? Run the installer again."
 fi
 

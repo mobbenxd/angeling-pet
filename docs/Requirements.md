@@ -15,7 +15,7 @@
 |---|---|---|
 | [Claude Code](https://claude.com/claude-code) (แอป Claude desktop หรือ CLI `claude`) | รายงานสถานะงานของ Claude | ติดตั้ง Claude ก่อน Angeling หรือถ้าติดตั้งทีหลัง ให้รันตัวติดตั้ง Angeling ซ้ำ |
 | `jq` | ใช้คู่กับ Claude Code | macOS 15 ขึ้นไปมีให้แล้ว ถ้าเป็น macOS 13–14 ต้องรัน `brew install jq` |
-| แอป LINE for Mac | [แจ้งเตือน LINE](LINE-Notifications.md) | ถ้าอยากเห็นข้อความด้วย ต้องให้สิทธิ์ Full Disk Access |
+| แอป LINE / Discord for Mac | [แจ้งเตือน LINE](LINE-Notifications.md) / [Discord](Discord-Notifications.md) | ต้องเปิดแอปไว้ ไม่ต้องให้สิทธิ์เพิ่ม |
 | แอป Calendar ที่มีบัญชีอยู่ (iCloud, Google ฯลฯ) | การ[ตั้งเตือน](Reminders.md)จะบันทึกลงปฏิทินด้วย | ไม่มีก็เตือนได้ปกติ |
 
 ## สำหรับคนที่จะ build เอง

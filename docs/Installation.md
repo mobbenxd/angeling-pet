@@ -56,7 +56,6 @@ Done! Angeling is in the bottom-right corner of your screen.
 
 | อยากได้ | ทำอะไร |
 |---|---|
-| เห็นข้อความ LINE ล่าสุด | ให้สิทธิ์ Full Disk Access ตาม[แจ้งเตือน LINE](LINE-Notifications.md) (ถ้าไม่ให้ จะเห็นแค่จำนวนที่ยังไม่อ่าน) |
 | ให้รายงานงานของ Claude Code | ติดตั้ง Claude Code แล้วทำขั้นที่ 3 ซ้ำ |
 | ไม่ให้เปิดเองตอนเปิดเครื่อง | ใช้คำสั่ง `curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh \| bash -s -- --no-login` แทนในขั้นที่ 3 |
 | ซ่อน Angeling ชั่วคราว | กด **⌥ + ⌘ + A** |
