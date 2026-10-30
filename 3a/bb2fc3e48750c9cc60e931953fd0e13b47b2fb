@@ -1,0 +1,41 @@
+docs/Development.md
+  s_dac10d5edeebbd::t_f47425197bb488 42
+docs/README.md
+  s_dac10d5edeebbd::t_f47425197bb488 6,32
+src/main.swift
+  s_dac10d5edeebbd::t_8b61a35248a67f 880
+  s_dac10d5edeebbd::t_a6ef6e0cda2f18 13,882,884-889,907,1176,1221-1223,1388,1404,1509-1510,1517,1610
+  s_dac10d5edeebbd::t_5eb93475cd678e 129,761,805,837-838,878,881,883,890-892,1389-1390,1403,1508,1511-1516,1518-1525
+  s_dac10d5edeebbd::t_f2f38b79500f98 267-270,274-280,299-300
+  s_dac10d5edeebbd::t_6e1b403f52c157 839
+  s_dac10d5edeebbd::t_ef27948ab9ee05 229,263-266,271-273,281-298,762-763
+docs/Discord-Notifications.md
+  s_dac10d5edeebbd::t_2e64f602614cc1 1-36,38-40
+  s_dac10d5edeebbd::t_b57949481f71eb 37
+docs/How-It-Works.md
+  s_dac10d5edeebbd::t_f47425197bb488 70-73
+docs/Usage.md
+  s_dac10d5edeebbd::t_f47425197bb488 10,55
+README.md
+  s_dac10d5edeebbd::t_f47425197bb488 7,10,47,65,138
+docs/Activity-Bubble.md
+  s_dac10d5edeebbd::t_f47425197bb488 33,48
+docs/First-Run.md
+  s_dac10d5edeebbd::t_109bbf2cf42203 12,16-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3abb2fc3e48750c9cc60e931953fd0e13b47b2fb",
+  "prompts": {},
+  "sessions": {
+    "s_dac10d5edeebbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92cfbefd-f079-4777-8e0a-a325bdf0f639",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
