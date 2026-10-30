@@ -1,0 +1,37 @@
+hooks/angeling-hook.sh
+  s_ccf9e5a67c3bd1::t_00eb2e52c4d957 84-86
+  s_ccf9e5a67c3bd1::t_b74e9227eeb4ab 52-53,55
+  s_ccf9e5a67c3bd1::t_511fb3efad4e30 54
+  s_ccf9e5a67c3bd1::t_d2e886b5408760 81-83
+README.md
+  s_ccf9e5a67c3bd1::t_12bc325d10a4d7 58,132
+src/main.swift
+  s_ccf9e5a67c3bd1::t_9cb7f5140c4d10 213-217,220,225-226,233,238-261
+  s_ccf9e5a67c3bd1::t_4562c6d3f1db18 148-149,151,161,170
+  s_ccf9e5a67c3bd1::t_f3783590682483 92-93
+  s_ccf9e5a67c3bd1::t_469e6df4075149 218-219,221-224,227-232,234-237,262-263
+  s_ccf9e5a67c3bd1::t_bda9cd36bdf0c4 150,152-160,162-169
+  s_ccf9e5a67c3bd1::t_829c637329e23d 89-91
+docs/Usage.md
+  s_ccf9e5a67c3bd1::t_12bc325d10a4d7 27-28,34-41
+  s_ccf9e5a67c3bd1::t_98c07d55ce2398 42
+docs/Troubleshooting.md
+  s_ccf9e5a67c3bd1::t_12bc325d10a4d7 57
+  s_ccf9e5a67c3bd1::t_7315da5396f16c 58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "21f6d5527a6376ae55c4bcc1e774dabd21058cb4",
+  "prompts": {},
+  "sessions": {
+    "s_ccf9e5a67c3bd1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92c9e74c-0308-41da-bcf4-2bfec558a08b",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "vasit <n_vasit@hotmail.com>"
+    }
+  }
+}
