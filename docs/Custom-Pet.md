@@ -5,7 +5,7 @@
 คลิกขวาที่ Angeling หรือไอคอนแถบเมนู แล้วเลือก **ตัวละคร ▸** กลุ่มแรกคือ Angeling และ Bee Husky (ลูกหมาไซบีเรียนฮัสกี้) ที่ทำท่าได้ครบเหมือน Angeling กลุ่มที่สองคือตัวละครจากเกม Bomber 18 ตัว:
 Thunder, Bomber Horse, Bomber Husky, Bomber Cat, Cool Pomeranian, Pumpkin Raccoon, Chubby Valkyrie, Chubby Drake, Chubby Mage, Chubby Beerus, Chubby Legend, Carrot Engineer, Sun Sage, Noid, Chick Squad, Chubby Cloudy, Tommy Shelby, Charles Leclerc
 
-ตัวละครเปลี่ยนทันทีและจำไว้หลังเปิดแอปใหม่ ท่าทางของตัวละคร Bomber:
+ชี้เมาส์ที่ชื่อเพื่อดูตัวอย่าง แล้วคลิกเพื่อใช้ตัวนั้น ตัวละครเปลี่ยนทันทีและจำไว้หลังเปิดแอปใหม่ ท่าทางของตัวละคร Bomber:
 
 | สถานะ | ท่า |
 |---|---|
