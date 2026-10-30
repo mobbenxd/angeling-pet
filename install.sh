@@ -22,7 +22,8 @@ echo "==> Artwork"
 "$ROOT/scripts/fetch-assets.sh"
 
 echo "==> App ($APP)"
-pkill -x Angeling 2>/dev/null || true
+# -a: when Angeling itself started this update it is our ancestor, which pkill skips by default.
+pkill -a -x Angeling 2>/dev/null || true
 if [ -d "$ROOT/Angeling.app" ]; then
   mkdir -p "$(dirname "$APP")"
   rm -rf "$APP"

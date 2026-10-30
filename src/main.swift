@@ -954,6 +954,17 @@ final class PetController: NSObject, NSMenuDelegate {
         setOverride("jumping", for: 1.2)
         refresh()
         Updater.install() // the installer quits this copy and opens the new one
+        // Still here after 3 minutes: the update failed (offline, GitHub down, …).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 180) { [weak self] in
+            guard let self, self.updating else { return }
+            self.updating = false
+            self.refresh()
+            let alert = NSAlert()
+            alert.messageText = "อัปเดตไม่สำเร็จ"
+            alert.informativeText = "ลองใหม่อีกครั้งภายหลัง ดูรายละเอียดได้ที่ ~/.claude/angeling-pet/update.log"
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
     }
     @objc func openReleasePage() { if let u = releasePage { NSWorkspace.shared.open(u) } }
     @objc func skipVersion() { d.set(latestVersion, forKey: "skippedVersion"); refresh() }
@@ -1671,6 +1682,9 @@ guard let sheet = SpriteSheet(url: baseDir.appendingPathComponent("spritesheet.w
 let controller = PetController(sheet: sheet)
 registerHotKeys([(kVK_ANSI_A, { controller.togglePet() }), (kVK_ANSI_R, { controller.newReminder() })])
 
+// Debug: ANGELING_UPDATE_NOW=1 starts an update right away (pair with ANGELING_UPDATE_CMD).
+if ProcessInfo.processInfo.environment["ANGELING_UPDATE_NOW"] != nil { controller.runUpdate() }
+
 // Debug: ANGELING_SNAPSHOT=/path.png renders the window to a PNG after a moment, then quits.
 if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     let env = ProcessInfo.processInfo.environment
@@ -1684,7 +1698,6 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     if env["ANGELING_HOVER"] != nil { controller.toggle.isHidden = false }
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }
     if env["ANGELING_LATEST_VERSION"] != nil || env["ANGELING_FAKE_VERSION"] != nil { controller.checkForUpdates(manual: false) }
-    if env["ANGELING_UPDATE_NOW"] != nil { controller.runUpdate() }
     if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
         let v = env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!
