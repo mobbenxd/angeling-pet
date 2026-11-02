@@ -1,0 +1,30 @@
+src/main.swift
+  s_6ce5d950f5d705::t_c15038e9cc45f1 2816
+  s_6ce5d950f5d705::t_08b15616386cbf 2356,2358-2364
+  s_6ce5d950f5d705::t_c7ce59709f7c28 17,933-936
+  s_6ce5d950f5d705::t_fa7697770c3dee 1067-1068,1083-1084,1086-1090,1092-1095,2369,2388-2389,2600-2613
+  s_6ce5d950f5d705::t_aecc14925ba11f 2824-2826
+  s_6ce5d950f5d705::t_9c0f040cf87918 937-938,2614
+README.md
+  s_6ce5d950f5d705::t_aecc14925ba11f 57
+docs/Usage.md
+  s_6ce5d950f5d705::t_aecc14925ba11f 76
+docs/Usage-Limits.md
+  s_6ce5d950f5d705::t_aecc14925ba11f 19-20,26-28,30,50-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "533ee440583e1017b196379829a10411a62c183d",
+  "prompts": {},
+  "sessions": {
+    "s_6ce5d950f5d705": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a26ac10b-c58d-49e4-9ad7-b5f4543ab350",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
