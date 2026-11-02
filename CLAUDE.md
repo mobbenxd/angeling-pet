@@ -18,7 +18,7 @@ A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session statu
 | `scripts/fetch-assets.sh` | Fills `assets/` from: a local Codex pet, then the latest release, then irowiki/myinstants |
 | `docs/` | User guide in **Thai**. `docs/README.md` is the index; every page ends with a link back to it |
 
-Runtime files: `~/Applications/Angeling.app`, `~/.claude/angeling-pet/` (hook, artwork, `state/`, `reminders.json`, `update.log`, and with limits on: `statusline.sh`, `statusline-orig.*`, `limits.json`), LaunchAgent `local.angeling.pet`, and UserDefaults domain `local.angeling.pet`.
+Runtime files: `~/Applications/Angeling.app`, `~/.claude/angeling-pet/` (hook, artwork, `state/`, `reminders.json`, `update.log`, and with limits on: `statusline.sh`, `statusline-orig.*`, `limits.json` from the status line, `limits-api.json` from the usage API), LaunchAgent `local.angeling.pet`, and UserDefaults domain `local.angeling.pet`.
 
 ## Build and check
 
