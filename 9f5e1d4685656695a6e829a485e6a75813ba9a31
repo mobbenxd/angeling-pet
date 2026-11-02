@@ -1,0 +1,55 @@
+scripts/build.sh
+  s_b0d58012e27573::t_f515f89c720a9b 9
+docs/Usage.md
+  s_b0d58012e27573::t_f57d81b8a304e0 56,59,62,67-77
+  s_b0d58012e27573::t_7e2ff01eb5122b 78
+src/main.swift
+  s_b0d58012e27573::t_4c70f7d8c729cf 2123
+  s_b0d58012e27573::t_deb07a77f821b8 1862-1868,2168,2172,2633-2634,2638-2639
+  s_b0d58012e27573::t_f515f89c720a9b 21,2192-2193,2651-2676,2678,2681-2902,2904
+  s_b0d58012e27573::t_605ffdf1ef1b3c 2903,2941-2957,2975,2978-2980,2985
+  s_b0d58012e27573::t_13fdbbb13608ab 2677,2679-2680
+  s_b0d58012e27573::t_02a89601400a9b 2905
+docs/Discord-Notifications.md
+  s_b0d58012e27573::t_f57d81b8a304e0 27
+docs/Updating-and-Uninstalling.md
+  s_b0d58012e27573::t_f57d81b8a304e0 14-15
+docs/README.md
+  s_b0d58012e27573::t_f57d81b8a304e0 7,30
+docs/LINE-Notifications.md
+  s_b0d58012e27573::t_f57d81b8a304e0 17,24
+docs/Usage-Limits.md
+  s_b0d58012e27573::t_f57d81b8a304e0 7,9,11,21,29,37
+docs/Reminders.md
+  s_b0d58012e27573::t_f57d81b8a304e0 51,67,69
+docs/Development.md
+  s_b0d58012e27573::t_65d02f1eceb6b7 9-10
+  s_b0d58012e27573::t_f57d81b8a304e0 53
+docs/Custom-Pet.md
+  s_b0d58012e27573::t_f57d81b8a304e0 5,8,17,53,62
+docs/Activity-Bubble.md
+  s_b0d58012e27573::t_f57d81b8a304e0 29,35
+docs/Troubleshooting.md
+  s_b0d58012e27573::t_f57d81b8a304e0 39
+README.md
+  s_b0d58012e27573::t_f57d81b8a304e0 26,57,146
+  s_b0d58012e27573::t_bf3f744b2fbcf7 66-67,70
+CLAUDE.md
+  s_b0d58012e27573::t_bf3f744b2fbcf7 9,36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "9f5e1d4685656695a6e829a485e6a75813ba9a31",
+  "prompts": {},
+  "sessions": {
+    "s_b0d58012e27573": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b29adbb-9d3e-4ca4-8272-f69106119a3d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "vasit <k.chaipaphat@gmail.com>"
+    }
+  }
+}
