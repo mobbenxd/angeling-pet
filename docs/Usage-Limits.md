@@ -6,13 +6,9 @@ Angeling แสดงว่าใช้ limit ของ Claude ไปแล้�
 
 เมนู → **ตั้งค่า… → Claude limit** แล้วเปิด **แสดง limit การใช้งาน Claude**
 
-ตัวเลขจะขึ้นหลังจาก Claude Code ทำงานครั้งถัดไป ระหว่างนั้นหน้าตั้งค่าจะเขียนว่า "รอข้อมูลจาก Claude Code…"
+ตัวเลขจะขึ้นภายในไม่กี่วินาที ระหว่างนั้นหน้าตั้งค่าจะเขียนว่า "รอข้อมูลจาก Claude…"
 
 ต้องใช้ Claude Code ที่ login ด้วยบัญชี Claude.ai (Pro / Max) ถ้าใช้ API key จะไม่มีข้อมูล limit
-
-Claude Code ใส่ตัวเลข limit ให้หลังจากได้คำตอบแรกของ session เท่านั้น ถ้ายังไม่มีตัวเลขเลย หน้าตั้งค่าจะเขียนว่า "ยังไม่มีข้อมูล limit" ให้ส่งข้อความใน Claude Code สักครั้ง ส่วนตอนเปิด session ใหม่ ตัวเลขล่าสุดจะยังอยู่ ไม่หายไประหว่างรอคำตอบแรก
-
-ตัวเลขมาจาก status line ซึ่งแสดงเฉพาะตอนใช้ `claude` ใน Terminal แอป Claude desktop ไม่ได้รัน status line ถ้าใช้แต่แอปนั้น ตัวเลขจะไม่อัปเดต
 
 ## แสดงที่ไหน
 
@@ -21,7 +17,7 @@ Claude Code ใส่ตัวเลข limit ให้หลังจากไ�
 | บับเบิลเปิดอยู่ | แถวบนสุดของบับเบิล เช่น `สัปดาห์ 62% · 5 ชม. 40%` |
 | บัญชีไม่มี limit 5 ชั่วโมง | `สัปดาห์ 71% · รีเซ็ต จ. 11:00` |
 | ซ่อนบับเบิล หรือไม่มีงาน | ป้ายเล็กใต้ Angeling เช่น `5 ชม. 40% · สัปดาห์ 62%` (5 ชั่วโมงขึ้นก่อนเพราะหมดเร็วกว่า) |
-| ยังไม่มีข้อมูล | ป้ายใต้ Angeling เขียนว่า `limit: รอ Claude Code…` |
+| ยังไม่มีข้อมูล | ป้ายใต้ Angeling เขียนว่า `limit: รอข้อมูล…` |
 
 ตั้งค่า… → Claude limit → **แสดงที่** เปลี่ยนได้:
 
@@ -45,13 +41,20 @@ Claude Code ใส่ตัวเลข limit ให้หลังจากไ�
 
 ## ทำงานอย่างไร
 
-Claude Code ส่งข้อมูล limit ให้เฉพาะ status line ไม่ได้ส่งให้ hook ตอนเปิดใช้ Angeling จะ:
+Angeling อ่านตัวเลขจาก 2 ทาง แล้วเก็บไว้ใน `~/.claude/angeling-pet/limits.json`
+
+**1. usage API ของ Claude** (ทางหลัก ทุก 5 นาที) เป็นตัวเลขชุดเดียวกับ `/usage` ใน Claude Code ใช้ได้ไม่ว่าจะใช้ Claude Code ผ่าน Terminal หรือแอป Claude desktop
+
+- ใช้ login ของ Claude Code ที่มีอยู่แล้ว Angeling อ่าน token จาก Keychain (`Claude Code-credentials`) ผ่าน `/usr/bin/security` หรือจาก `~/.claude/.credentials.json` ถ้า macOS ถามสิทธิ์ ให้กด **Always Allow**
+- Angeling แค่อ่าน token ไม่ต่ออายุให้ ถ้า token หมดอายุ ตัวเลขจะค้างค่าล่าสุดไว้จนกว่าจะใช้ Claude Code อีกครั้ง
+- ส่ง token ไปที่ `api.anthropic.com` เท่านั้น
+- วิธีนี้ดัดแปลงมาจาก [CodexBar](https://github.com/steipete/CodexBar) API นี้ไม่มีเอกสารทางการ จึงอาจเปลี่ยนได้ ถ้าใช้ไม่ได้ ยังมีทางที่ 2
+
+**2. status line ของ Claude Code** Claude Code ส่งข้อมูล limit ให้เฉพาะ status line ไม่ได้ส่งให้ hook ทางนี้จะอัปเดตเฉพาะตอนใช้ `claude` ใน Terminal ตอนเปิดใช้ Angeling จะ:
 
 1. สำรอง `~/.claude/settings.json` ไว้ที่ `settings.json.angeling-backup`
 2. เก็บคำสั่ง status line เดิมของคุณ (ถ้ามี) ไว้ใน `~/.claude/angeling-pet/statusline-orig.json`
-3. ตั้ง status line เป็น `~/.claude/angeling-pet/statusline.sh` ซึ่งบันทึกข้อมูลลง `limits.json` แล้วเรียก status line เดิมของคุณต่อ หน้าจอ Claude Code จึงเหมือนเดิม
-
-ตัวเลขจะอัปเดตเมื่อ status line ของ Claude Code แสดงผลเท่านั้น ถ้ายังไม่เคยมี status line แสดงผลหลังเปิดใช้ จะขึ้นว่า "รอข้อมูลจาก Claude Code…" จนกว่าจะใช้ Claude Code อีกครั้ง
+3. ตั้ง status line เป็น `~/.claude/angeling-pet/statusline.sh` ซึ่งบันทึกข้อมูลลง `limits.json` แล้วเรียก status line เดิมของคุณต่อ หน้าจอ Claude Code จึงเหมือนเดิม session ใหม่ที่ยังไม่มีตัวเลข จะไม่เขียนทับตัวเลขที่เก็บไว้
 
 ตอนปิด Angeling จะคืน status line เดิมให้ แต่เก็บ `limits.json` ไว้ เปิดใหม่จึงเห็นตัวเลขล่าสุดทันที ถ้าคุณเปลี่ยน status line เป็นอย่างอื่นไปแล้ว Angeling จะไม่แตะไฟล์ `uninstall.sh` ก็คืนให้เหมือนกัน
 
