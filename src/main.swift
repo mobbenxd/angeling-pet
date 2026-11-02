@@ -1173,8 +1173,9 @@ enum UsageLimits {
     }
 }
 
-/// The limits under the pet while the bubble doesn't show them. Under the pet a power bar, the week on top
-/// (5 px) and the 5-hour window under it (4 px), or the week alone at full height; under the bar a small dark
+/// The limits under the pet while the bubble doesn't show them. Under the pet a power bar: two outlined
+/// 72 px pills with a gap, the week on top (7 px) and the 5-hour window under it (5 px), or one 8 px pill
+/// when there is only one window; under the bar a small dark
 /// label with both numbers, "5 ชม. 60%  ·  สัปดาห์ 38%". `style` picks "bar", "text" or "both".
 final class LimitBar: NSView {
     var text = NSAttributedString()
@@ -1182,20 +1183,20 @@ final class LimitBar: NSView {
     var five: LimitWindow?
     var remaining = false
     var style = "both"
-    static let barSize = NSSize(width: 56, height: 9)
+    var barSize: NSSize { NSSize(width: 72, height: week != nil && five != nil ? 14 : 8) }
     /// No numbers yet (waiting / no data): only the label, which says so.
     var hasBar: Bool { style != "text" && (week != nil || five != nil) }
     var hasText: Bool { style != "bar" || !hasBar }
     var textSize: NSSize { NSSize(width: ceil(text.size().width) + 12, height: 16) }
     var size: NSSize {
         let t = hasText ? textSize : .zero
-        let b = hasBar ? Self.barSize : .zero
+        let b = hasBar ? barSize : .zero
         return NSSize(width: max(t.width, b.width), height: t.height + b.height + (hasBar && hasText ? 3 : 0))
     }
     override func draw(_ dirtyRect: NSRect) {
         let sz = size
         if hasBar {
-            let b = Self.barSize
+            let b = barSize
             drawBar(NSRect(x: round((sz.width - b.width) / 2), y: sz.height - b.height, width: b.width, height: b.height))
         }
         if hasText {
@@ -1208,22 +1209,32 @@ final class LimitBar: NSView {
         }
     }
     private func drawBar(_ r: NSRect) {
-        NSGraphicsContext.saveGraphicsState()
-        defer { NSGraphicsContext.restoreGraphicsState() }
-        let clip = NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3)
-        NSColor(white: 0.1, alpha: 0.85).setFill()
-        clip.fill()
-        clip.addClip()
-        func fill(_ w: LimitWindow?, y: CGFloat, h: CGFloat) {
+        // One pill per window: a dark track with a light outline, filled in the window's colour.
+        func pill(_ w: LimitWindow?, y: CGFloat, h: CGFloat) {
             guard let w else { return }
+            let track = NSRect(x: r.minX, y: y, width: r.width, height: h)
+            let shape = NSBezierPath(roundedRect: track, xRadius: h / 2, yRadius: h / 2)
+            NSColor(white: 0.08, alpha: 0.9).setFill()
+            shape.fill()
+            NSGraphicsContext.saveGraphicsState()
+            shape.addClip()
             let share = remaining ? 100 - w.used : w.used
-            limitBarColor(w.used).setFill()
-            NSRect(x: r.minX, y: y, width: round(r.width * CGFloat(share / 100)), height: h).fill()
+            // The mockup's stronger colours: the label's lighter ones look washed out as a fill.
+            (w.used < 60 ? NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.94, alpha: 1)
+                : w.used <= 85 ? NSColor(calibratedRed: 0.95, green: 0.6, blue: 0.23, alpha: 1)
+                : NSColor(calibratedRed: 1, green: 0.48, blue: 0.48, alpha: 1)).setFill()
+            NSRect(x: track.minX, y: y, width: round(track.width * CGFloat(share / 100)), height: h).fill()
+            NSGraphicsContext.restoreGraphicsState()
+            NSColor(white: 1, alpha: 0.35).setStroke()
+            let edge = NSBezierPath(roundedRect: track.insetBy(dx: 0.5, dy: 0.5), xRadius: h / 2 - 0.5, yRadius: h / 2 - 0.5)
+            edge.lineWidth = 1
+            edge.stroke()
         }
-        switch (week, five) {
-        case (.some, .some): fill(five, y: r.minY, h: 4); fill(week, y: r.minY + 4, h: r.height - 4)
-        case (.some, nil): fill(week, y: r.minY, h: r.height)
-        default: fill(five, y: r.minY, h: r.height)
+        if week != nil && five != nil {
+            pill(five, y: r.minY, h: 5)
+            pill(week, y: r.minY + 7, h: 7)
+        } else {
+            pill(week ?? five, y: r.minY, h: r.height)
         }
     }
 }
