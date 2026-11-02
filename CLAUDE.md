@@ -14,6 +14,7 @@ A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session statu
 | `scripts/package.sh <ver>` | Universal (arm64+x86_64) app plus release files in `dist/` |
 | `scripts/import-characters.py <zip>` | Builds `assets/characters/` (sheets + `characters.json` frame table) from the Bomber character pack |
 | `scripts/import-pet.swift <sheet> <id> "<Name>"` | Fits a generated sheet onto the Codex v2 grid as `assets/pets/<id>/` (Bee Husky came from `~/Downloads/huskey.png`) |
+| `scripts/make-icon.swift <sheet> <out.icns>` | App icon from Angeling's first idle frame; `build.sh` runs it when the artwork is present (the icon is never committed) |
 | `scripts/fetch-assets.sh` | Fills `assets/` from: a local Codex pet, then the latest release, then irowiki/myinstants |
 | `docs/` | User guide in **Thai**. `docs/README.md` is the index; every page ends with a link back to it |
 

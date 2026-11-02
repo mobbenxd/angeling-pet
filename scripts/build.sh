@@ -7,6 +7,13 @@ APP="${1:-$HOME/Applications/Angeling.app}"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # macOS 13 matches LSMinimumSystemVersion below; left to itself, swiftc targets the SDK, which can be newer than this Mac.
 swiftc -O -target "${ANGELING_TARGET:-$(uname -m)-apple-macos13}" -o "$APP/Contents/MacOS/Angeling" "$ROOT/src/main.swift" -framework AppKit -framework Carbon -framework EventKit -framework SwiftUI
+# App icon from Angeling's artwork (© Gravity, never committed): the repo's assets/, else the installed copy.
+for SHEET in "$ROOT/assets/spritesheet.webp" "$HOME/.claude/angeling-pet/spritesheet.webp"; do
+  if [ -f "$SHEET" ]; then
+    swift "$ROOT/scripts/make-icon.swift" "$SHEET" "$APP/Contents/Resources/AppIcon.icns" || echo "warning: app icon not made" >&2
+    break
+  fi
+done
 # Version: ANGELING_VERSION, else the latest git tag (so source builds get update notices), else "dev".
 TAG=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || true)
 VERSION="${ANGELING_VERSION:-${TAG#v}}"
@@ -18,6 +25,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>local.angeling.pet</string>
   <key>CFBundleName</key><string>Angeling</string>
   <key>CFBundleExecutable</key><string>Angeling</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>LSUIElement</key><true/>
