@@ -1174,7 +1174,7 @@ enum UsageLimits {
 }
 
 /// The limits under the pet while the bubble doesn't show them. Under the pet a power bar: two outlined
-/// 72 px pills with a gap, the week on top (7 px) and the 5-hour window under it (5 px), or one 8 px pill
+/// 72 px pills (outline optional) with a gap, the week on top (7 px) and the 5-hour window under it (5 px), or one 8 px pill
 /// when there is only one window; under the bar a small dark
 /// label with both numbers, "5 ชม. 60%  ·  สัปดาห์ 38%". `style` picks "bar", "text" or "both".
 final class LimitBar: NSView {
@@ -1183,6 +1183,7 @@ final class LimitBar: NSView {
     var five: LimitWindow?
     var remaining = false
     var style = "both"
+    var outline = true
     var barSize: NSSize { NSSize(width: 72, height: week != nil && five != nil ? 14 : 8) }
     /// No numbers yet (waiting / no data): only the label, which says so.
     var hasBar: Bool { style != "text" && (week != nil || five != nil) }
@@ -1225,6 +1226,7 @@ final class LimitBar: NSView {
                 : NSColor(calibratedRed: 1, green: 0.48, blue: 0.48, alpha: 1)).setFill()
             NSRect(x: track.minX, y: y, width: round(track.width * CGFloat(share / 100)), height: h).fill()
             NSGraphicsContext.restoreGraphicsState()
+            guard outline else { return }
             NSColor(white: 1, alpha: 0.35).setStroke()
             let edge = NSBezierPath(roundedRect: track.insetBy(dx: 0.5, dy: 0.5), xRadius: h / 2 - 0.5, yRadius: h / 2 - 0.5)
             edge.lineWidth = 1
@@ -1756,6 +1758,15 @@ final class PetController: NSObject, NSMenuDelegate {
     var limitsLeft: Bool { (ProcessInfo.processInfo.environment["ANGELING_LIMIT_MODE"] ?? d.string(forKey: "limitMode")) == "left" }
     /// Where the limits show: "auto" (the bubble's top row, or the bar while that row isn't showing), "both", or "bar".
     /// What sits under the pet: "both" (power bar and numbers), "bar", or "text".
+    /// Whether the power bar's pills have a light outline.
+    var limitOutline: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMIT_OUTLINE"].map { $0 != "0" } ?? (d.object(forKey: "limitOutline") as? Bool ?? true) }
+    /// Which windows the bubble row and the bar / label show: "both", "five" or "week".
+    var limitWindows: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_WINDOWS"] ?? d.string(forKey: "limitWindows") ?? "both" }
+    /// The windows to show; when the chosen one doesn't exist for this account, whatever does.
+    func shownLimits(_ week: LimitWindow?, _ five: LimitWindow?) -> (week: LimitWindow?, five: LimitWindow?) {
+        let w = limitWindows == "five" ? nil : week, f = limitWindows == "week" ? nil : five
+        return w == nil && f == nil ? (week, five) : (w, f)
+    }
     var limitStyle: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_STYLE"] ?? d.string(forKey: "limitStyle") ?? "both" }
     var limitPlace: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_PLACE"] ?? d.string(forKey: "limitPlace") ?? "auto" }
     var sessions: [(SessionState, String)] = []
@@ -2502,10 +2513,12 @@ final class PetController: NSObject, NSMenuDelegate {
         if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), limitState != .off {
             barShown = true
             limitBar.style = limitStyle
+            limitBar.outline = limitOutline
             limitBar.remaining = limitsLeft
             limitBar.week = nil
             limitBar.five = nil
-            if case let .data(week, five) = limitState {
+            if case let .data(allWeek, allFive) = limitState {
+                let (week, five) = shownLimits(allWeek, allFive)
                 limitBar.text = limitBarText(week: week, five: five)
                 limitBar.week = week
                 limitBar.five = five
@@ -2561,7 +2574,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)" : "")
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
-        return "\(expanded)|\(limitState.signature)\(limitsLeft)\(limitPlace)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
+        return "\(expanded)|\(limitState.signature)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -2752,7 +2765,8 @@ final class PetController: NSObject, NSMenuDelegate {
 
     /// "สัปดาห์ 62%  ·  5 ชม. 40%", or "สัปดาห์ 71%  ·  รีเซ็ต จ. 11:00" without a 5-hour window.
     func limitText() -> NSAttributedString? {
-        guard showLimits, limitPlace != "bar", case let .data(week, five) = limitState else { return nil }
+        guard showLimits, limitPlace != "bar", case let .data(allWeek, allFive) = limitState else { return nil }
+        let (week, five) = shownLimits(allWeek, allFive)
         let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: theme.secondary]
         let out = NSMutableAttributedString()
         func add(_ name: String, _ win: LimitWindow) {
@@ -2763,7 +2777,9 @@ final class PetController: NSObject, NSMenuDelegate {
                                           attributes: [.font: NSFont.boldSystemFont(ofSize: 12), .foregroundColor: limitColor(win.used)]))
         }
         if let w = week { add("สัปดาห์", w) }
-        if let f = five { add("5 ชม.", f) } else if let r = week?.resetsAt {
+        if let f = five { add("5 ชม.", f) }
+        // One window shown: room for its reset time too.
+        if (week == nil) != (five == nil), let r = (week ?? five)?.resetsAt {
             out.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r))", attributes: label))
         }
         return out.length > 0 ? out : nil
@@ -2837,6 +2853,16 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
 
+    func setLimitWindows(_ id: String) {
+        d.set(id, forKey: "limitWindows")
+        refresh()
+    }
+
+    func setLimitOutline(_ on: Bool) {
+        d.set(on, forKey: "limitOutline")
+        refresh()
+    }
+
     func setLimitStyle(_ id: String) {
         d.set(id, forKey: "limitStyle")
         refresh()
@@ -2889,7 +2915,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: return 360
         case .look: return 560
         case .alerts: return 280
-        case .limits: return 360
+        case .limits: return 450
         case .updates: return 250
         }
     }
@@ -3008,6 +3034,13 @@ struct SettingsPane: View {
                     Text("หลอดพลังอย่างเดียว").tag("bar")
                     Text("ตัวเลขอย่างเดียว").tag("text")
                 }
+                Picker("limit ที่แสดง", selection: m.bind({ c.limitWindows }, { c.setLimitWindows($0) })) {
+                    Text("5 ชม. และสัปดาห์").tag("both")
+                    Text("5 ชม. อย่างเดียว").tag("five")
+                    Text("สัปดาห์อย่างเดียว").tag("week")
+                }
+                Toggle("ขอบหลอดพลัง", isOn: m.bind({ c.limitOutline }, { c.setLimitOutline($0) }))
+                    .disabled(c.limitStyle == "text")
             }
             .disabled(!c.showLimits)
         case .updates:
