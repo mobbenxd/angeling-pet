@@ -530,7 +530,8 @@ enum Focus {
 
     /// Run a tool and wait for it; its stdout, or nil when it could not start.
     @discardableResult
-    static func output(_ path: String, _ args: [String], env: [String: String]? = nil) -> String? {
+    /// With a timeout, the process is killed if it hasn't finished by then (e.g. a Keychain prompt nobody answers).
+    static func output(_ path: String, _ args: [String], env: [String: String]? = nil, timeout: TimeInterval? = nil) -> String? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
@@ -539,6 +540,9 @@ enum Focus {
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
         guard (try? p.run()) != nil else { return nil }
+        if let timeout {
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if p.isRunning { p.terminate() } }
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         return String(decoding: data, as: UTF8.self)
@@ -900,10 +904,11 @@ final class ReminderForm: NSObject {
 }
 
 // MARK: - Usage limits (Claude's 5-hour and weekly rate limits)
-// Two sources write limits.json in the status line's shape:
-// - Claude's usage API (what /usage shows), every 5 minutes, with Claude Code's own login token read through
-//   /usr/bin/security. The token is only read; refreshing it is left to Claude Code. Works from any Claude app.
-// - Claude Code passes rate_limits to the status line, not to hooks. Turning the feature on points
+// Two sources, each with its own file in the status line's shape:
+// - limits-api.json: Claude's usage API (what /usage shows), every 5 minutes, with Claude Code's own login token
+//   read through /usr/bin/security. The token is only read; refreshing it is left to Claude Code. Works from any
+//   Claude app, so it wins while it is fresh.
+// - limits.json: Claude Code passes rate_limits to the status line, not to hooks. Turning the feature on points
 //   settings.json's statusLine at a small wrapper that saves the status JSON and then runs the user's own
 //   status line, if they had one. Turning it off puts theirs back.
 
@@ -957,6 +962,9 @@ func limitCountdown(_ d: Date) -> String {
 
 enum UsageLimits {
     static let file = baseDir.appendingPathComponent("limits.json")
+    static let apiFile = baseDir.appendingPathComponent("limits-api.json")
+    /// How long the API's numbers beat the status line's.
+    static let apiFresh: TimeInterval = 15 * 60
     static let wrapper = baseDir.appendingPathComponent("statusline.sh")
     static let origJSON = baseDir.appendingPathComponent("statusline-orig.json")
     static let origCmd = baseDir.appendingPathComponent("statusline-orig.cmd")
@@ -970,7 +978,8 @@ enum UsageLimits {
     # A new session has no rate_limits until its first reply, so that doesn't replace numbers already saved.
     DIR="$(cd "$(dirname "$0")" && pwd)"
     input=$(cat)
-    if printf '%s' "$input" | grep -q '"rate_limits"' || ! grep -q '"rate_limits"' "$DIR/limits.json" 2>/dev/null; then
+    has() { grep -Eq '"rate_limits"[[:space:]]*:[[:space:]]*[{][[:space:]]*"'; }
+    if printf '%s' "$input" | has || ! has 2>/dev/null < "$DIR/limits.json"; then
       tmp=$(mktemp "$DIR/.limits.XXXXXX") && printf '%s' "$input" > "$tmp" && mv -f "$tmp" "$DIR/limits.json"
     fi
     if [ -s "$DIR/statusline-orig.cmd" ]; then
@@ -991,9 +1000,19 @@ enum UsageLimits {
             let five = p.count > 1 ? LimitWindow(used: p[1], resetsAt: Date().addingTimeInterval(80 * 60)) : nil
             return .data(week: week, five: five)
         }
-        guard let data = try? Data(contentsOf: file) else { return .waiting }
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rl = root["rate_limits"] as? [String: Any] else { return .noData }
+        let fm = FileManager.default
+        let api = windows(apiFile), status = windows(file)
+        let apiAge = ((try? fm.attributesOfItem(atPath: apiFile.path))?[.modificationDate] as? Date).map { -$0.timeIntervalSinceNow }
+        if let api, let age = apiAge, age < apiFresh { return api }
+        if let w = status ?? api { return w }
+        return fm.fileExists(atPath: file.path) || fm.fileExists(atPath: apiFile.path) ? .noData : .waiting
+    }
+
+    /// The windows in one saved file, or nil when it has none.
+    private static func windows(_ url: URL) -> LimitState? {
+        guard let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rl = root["rate_limits"] as? [String: Any] else { return nil }
         func window(_ key: String) -> LimitWindow? {
             guard let w = rl[key] as? [String: Any], let used = (w["used_percentage"] as? NSNumber)?.doubleValue else { return nil }
             var reset: Date?
@@ -1001,14 +1020,14 @@ enum UsageLimits {
                 let t = n.doubleValue
                 reset = Date(timeIntervalSince1970: t > 1e12 ? t / 1000 : t)
             } else if let s = w["resets_at"] as? String {
-                reset = ISO8601DateFormatter().date(from: s)
+                reset = isoDate(s)
             }
             // Past its reset and nothing newer yet: the window starts over.
             if let r = reset, r < Date() { return LimitWindow(used: 0, resetsAt: nil) }
             return LimitWindow(used: min(max(used, 0), 100), resetsAt: reset)
         }
         let week = window("seven_day"), five = window("five_hour")
-        return week == nil && five == nil ? .noData : .data(week: week, five: five)
+        return week == nil && five == nil ? nil : .data(week: week, five: five)
     }
 
     private static func loadSettings() throws -> [String: Any] {
@@ -1043,27 +1062,26 @@ enum UsageLimits {
         ((statusLine as? [String: Any])?["command"] as? String)?.contains("angeling-pet/statusline.sh") ?? false
     }
 
-    /// Fetch the usage API and save it as limits.json. Blocking: call it off the main thread.
-    /// Returns false on 429, so the caller can back off.
-    @discardableResult
-    static func fetchFromAPI() -> Bool {
-        guard let token = loginToken(), let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return true }
+    /// Fetch the usage API and save it as limits-api.json, then call `done` (false after a 429, to back off).
+    /// Reads the Keychain synchronously: call it off the main thread.
+    static func fetchFromAPI(_ done: @escaping (Bool) -> Void) {
+        guard let token = loginToken(), let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return done(true) }
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("claude-cli/2.1.0 (external, cli)", forHTTPHeaderField: "User-Agent")
-        var result: (Data?, Int) = (nil, 0)
-        let done = DispatchSemaphore(value: 0)
         URLSession.shared.dataTask(with: req) { data, resp, _ in
-            result = (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
-            done.signal()
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 401 { cachedToken = nil }  // Claude Code renewed it; read the new one next time
+            if status == 200, let data { save(data) }
+            done(status != 429)
         }.resume()
-        done.wait()
-        if result.1 == 429 { return false }
-        guard result.1 == 200, let data = result.0,
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return true }
-        // {"five_hour": {"utilization": 2.0, "resets_at": "2026-11-02T12:20:00.37+00:00"}, "seven_day": {…}}
+    }
+
+    /// {"five_hour": {"utilization": 2.0, "resets_at": "2026-11-02T12:20:00.37+00:00"}, "seven_day": {…}}
+    private static func save(_ data: Data) {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         var rl: [String: Any] = [:]
         for key in ["five_hour", "seven_day"] {
             guard let w = root[key] as? [String: Any], let used = (w["utilization"] as? NSNumber)?.doubleValue else { continue }
@@ -1072,39 +1090,37 @@ enum UsageLimits {
             if let s = w["resets_at"] as? String, let d = isoDate(s) { win["resets_at"] = Int((d.timeIntervalSince1970 / 60).rounded() * 60) }
             rl[key] = win
         }
-        guard !rl.isEmpty, let out = try? JSONSerialization.data(withJSONObject: ["source": "api", "rate_limits": rl]) else { return true }
+        guard !rl.isEmpty, let out = try? JSONSerialization.data(withJSONObject: ["rate_limits": rl]) else { return }
         try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
-        try? out.write(to: file, options: .atomic)
-        return true
+        try? out.write(to: apiFile, options: .atomic)
     }
 
-    /// "2026-11-02T12:20:00.372910+00:00": ISO8601DateFormatter doesn't take six fraction digits, so drop them.
-    /// The rounding above makes up for the dropped fraction.
+    private static let iso = ISO8601DateFormatter()
+
+    /// "2026-11-02T12:20:00.372910+00:00": ISO8601DateFormatter doesn't take six fraction digits, so drop
+    /// the fraction of a second before the zone. The rounding in `save` makes up for it.
     static func isoDate(_ s: String) -> Date? {
-        let plain = s.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
-        return ISO8601DateFormatter().date(from: plain)
+        iso.date(from: s.replacingOccurrences(of: #"\.\d+(?=(Z|[+-]\d{2}:?\d{2})$)"#, with: "", options: .regularExpression))
     }
+
+    /// Kept until it expires or gets a 401, so the Keychain is read once per token, not every 5 minutes.
+    private static var cachedToken: (token: String, expires: Date)?
 
     /// Claude Code's access token, from its Keychain item (macOS) or ~/.claude/.credentials.json.
     /// An expired token is skipped: Claude Code renews it the next time it runs.
     static func loginToken() -> String? {
-        var data: Data?
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        p.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        if (try? p.run()) != nil {
-            data = out.fileHandleForReading.readDataToEndOfFile()
-            p.waitUntilExit()
-            if p.terminationStatus != 0 { data = nil }
+        if let c = cachedToken, c.expires > Date() { return c.token }
+        cachedToken = nil
+        let keychain = Focus.output("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], timeout: 20)
+        for data in [keychain.flatMap { $0.data(using: .utf8) }, try? Data(contentsOf: home.appendingPathComponent(".claude/.credentials.json"))] {
+            guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let oauth = root["claudeAiOauth"] as? [String: Any], let token = oauth["accessToken"] as? String else { continue }
+            let expires = (oauth["expiresAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) } ?? .distantFuture
+            guard expires > Date() else { return nil }
+            cachedToken = (token, expires)
+            return token
         }
-        if data == nil { data = try? Data(contentsOf: home.appendingPathComponent(".claude/.credentials.json")) }
-        guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = root["claudeAiOauth"] as? [String: Any], let token = oauth["accessToken"] as? String else { return nil }
-        if let exp = (oauth["expiresAt"] as? NSNumber)?.doubleValue, exp / 1000 < Date().timeIntervalSince1970 { return nil }
-        return token
+        return nil
     }
 
     /// Rewrite the wrapper when an update changed it; settings.json already points at it.
@@ -2646,16 +2662,17 @@ final class PetController: NSObject, NSMenuDelegate {
 
     /// Asks Claude's usage API (every 5 minutes, and when the limits are turned on); 30 minutes' rest after a 429.
     func fetchLimits() {
-        guard showLimits, !limitFetching, Date() > limitBackoff,
-              ProcessInfo.processInfo.environment["ANGELING_LIMITS"] == nil else { return }
+        let env = ProcessInfo.processInfo.environment
+        guard showLimits, !limitFetching, Date() > limitBackoff, env["ANGELING_LIMITS"] == nil, env["ANGELING_SNAPSHOT"] == nil else { return }
         limitFetching = true
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let ok = UsageLimits.fetchFromAPI()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.limitFetching = false
-                if !ok { self.limitBackoff = Date().addingTimeInterval(1800) }
-                self.pollLimits()
+        DispatchQueue.global(qos: .utility).async {
+            UsageLimits.fetchFromAPI { ok in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.limitFetching = false
+                    if !ok { self.limitBackoff = Date().addingTimeInterval(1800) }
+                    self.pollLimits()
+                }
             }
         }
     }
@@ -2746,15 +2763,15 @@ final class PetController: NSObject, NSMenuDelegate {
 
     @objc func toggleLimits() {
         let on = !showLimits
+        // The usage API needs nothing from settings.json, so a status line that can't be set doesn't stop the limits.
         do {
             if on { try UsageLimits.enable() } else { try UsageLimits.disable() }
         } catch {
             let a = NSAlert()
-            a.messageText = on ? "เปิดการแสดง limit ไม่สำเร็จ" : "คืนค่า status line เดิมไม่สำเร็จ"
-            a.informativeText = error.localizedDescription
+            a.messageText = on ? "ตั้ง status line ของ Claude Code ไม่สำเร็จ" : "คืนค่า status line เดิมไม่สำเร็จ"
+            a.informativeText = error.localizedDescription + (on ? "\n\nยังแสดง limit จาก usage API ของ Claude ได้ตามปกติ" : "")
             NSApp.activate(ignoringOtherApps: true)
             a.runModal()
-            if on { return }
         }
         d.set(on, forKey: "showLimits")
         pollLimits()

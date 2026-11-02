@@ -30,7 +30,7 @@ if [ -f "$SETTINGS" ] && command -v jq >/dev/null; then
   else
     rm -f "$SETTINGS.tmp"
   fi
-  rm -f "$RUNTIME/statusline-orig.json" "$RUNTIME/statusline-orig.cmd" "$RUNTIME/statusline.sh" "$RUNTIME/limits.json"
+  rm -f "$RUNTIME/statusline-orig.json" "$RUNTIME/statusline-orig.cmd" "$RUNTIME/statusline.sh" "$RUNTIME/limits.json" "$RUNTIME/limits-api.json"
 fi
 
 if [ "${1:-}" = "--purge" ]; then

@@ -41,22 +41,24 @@ Angeling แสดงว่าใช้ limit ของ Claude ไปแล้�
 
 ## ทำงานอย่างไร
 
-Angeling อ่านตัวเลขจาก 2 ทาง แล้วเก็บไว้ใน `~/.claude/angeling-pet/limits.json`
+Angeling อ่านตัวเลขจาก 2 ทาง แต่ละทางเก็บไฟล์ของตัวเองใน `~/.claude/angeling-pet/` ถ้าตัวเลขจาก API อายุไม่เกิน 15 นาทีจะใช้ตัวนั้น ไม่อย่างนั้นใช้ของ status line
 
-**1. usage API ของ Claude** (ทางหลัก ทุก 5 นาที) เป็นตัวเลขชุดเดียวกับ `/usage` ใน Claude Code ใช้ได้ไม่ว่าจะใช้ Claude Code ผ่าน Terminal หรือแอป Claude desktop
+**1. usage API ของ Claude** (ทางหลัก ทุก 5 นาที เก็บใน `limits-api.json`) เป็นตัวเลขชุดเดียวกับ `/usage` ใน Claude Code ใช้ได้ไม่ว่าจะใช้ Claude Code ผ่าน Terminal หรือแอป Claude desktop
 
-- ใช้ login ของ Claude Code ที่มีอยู่แล้ว Angeling อ่าน token จาก Keychain (`Claude Code-credentials`) ผ่าน `/usr/bin/security` หรือจาก `~/.claude/.credentials.json` ถ้า macOS ถามสิทธิ์ ให้กด **Always Allow**
+- ใช้ login ของ Claude Code ที่มีอยู่แล้ว Angeling อ่าน token จาก Keychain (`Claude Code-credentials`) ผ่าน `/usr/bin/security` หรือจาก `~/.claude/.credentials.json` ถ้า macOS ถามสิทธิ์ ให้กด **Always Allow** (ถ้าไม่ตอบภายใน 20 วินาที Angeling จะข้ามรอบนั้นไป) token ที่อ่านแล้วจะจำไว้จนหมดอายุ Keychain จึงถูกอ่านครั้งเดียวต่อ token
 - Angeling แค่อ่าน token ไม่ต่ออายุให้ ถ้า token หมดอายุ ตัวเลขจะค้างค่าล่าสุดไว้จนกว่าจะใช้ Claude Code อีกครั้ง
-- ส่ง token ไปที่ `api.anthropic.com` เท่านั้น
+- **ความเป็นส่วนตัว:** ระหว่างเปิด limit ไว้ Angeling จะส่ง token นี้ไปที่ `api.anthropic.com` ทุก 5 นาที ไม่ส่งไปที่อื่น ปิด limit แล้วจะหยุดส่ง
 - วิธีนี้ดัดแปลงมาจาก [CodexBar](https://github.com/steipete/CodexBar) API นี้ไม่มีเอกสารทางการ จึงอาจเปลี่ยนได้ ถ้าใช้ไม่ได้ ยังมีทางที่ 2
 
-**2. status line ของ Claude Code** Claude Code ส่งข้อมูล limit ให้เฉพาะ status line ไม่ได้ส่งให้ hook ทางนี้จะอัปเดตเฉพาะตอนใช้ `claude` ใน Terminal ตอนเปิดใช้ Angeling จะ:
+**2. status line ของ Claude Code** (เก็บใน `limits.json`) Claude Code ส่งข้อมูล limit ให้เฉพาะ status line ไม่ได้ส่งให้ hook ทางนี้จะอัปเดตเฉพาะตอนใช้ `claude` ใน Terminal ตอนเปิดใช้ Angeling จะ:
 
 1. สำรอง `~/.claude/settings.json` ไว้ที่ `settings.json.angeling-backup`
 2. เก็บคำสั่ง status line เดิมของคุณ (ถ้ามี) ไว้ใน `~/.claude/angeling-pet/statusline-orig.json`
 3. ตั้ง status line เป็น `~/.claude/angeling-pet/statusline.sh` ซึ่งบันทึกข้อมูลลง `limits.json` แล้วเรียก status line เดิมของคุณต่อ หน้าจอ Claude Code จึงเหมือนเดิม session ใหม่ที่ยังไม่มีตัวเลข จะไม่เขียนทับตัวเลขที่เก็บไว้
 
-ตอนปิด Angeling จะคืน status line เดิมให้ แต่เก็บ `limits.json` ไว้ เปิดใหม่จึงเห็นตัวเลขล่าสุดทันที ถ้าคุณเปลี่ยน status line เป็นอย่างอื่นไปแล้ว Angeling จะไม่แตะไฟล์ `uninstall.sh` ก็คืนให้เหมือนกัน
+ถ้าตั้ง status line ไม่สำเร็จ (เช่น `settings.json` เป็น JSON ที่ผิด) Angeling จะแจ้งเตือน แต่ยังเปิด limit จาก API ให้ตามปกติ
+
+ตอนปิด Angeling จะคืน status line เดิมให้ แต่เก็บ `limits.json` และ `limits-api.json` ไว้ เปิดใหม่จึงเห็นตัวเลขล่าสุดทันที ถ้าคุณเปลี่ยน status line เป็นอย่างอื่นไปแล้ว Angeling จะไม่แตะไฟล์ `uninstall.sh` ก็คืนให้เหมือนกัน
 
 ไฟล์ `settings.json` จะถูกจัดรูปแบบใหม่ (ลำดับ key และการเว้นวรรคเปลี่ยน) แต่ค่าเหมือนเดิมทุกอย่าง
 
