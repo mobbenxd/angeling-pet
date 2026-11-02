@@ -1,0 +1,29 @@
+src/main.swift
+  s_6ce5d950f5d705::t_f283a76999432a 1177,1186,1229,1761-1769,2516,2520-2521,2577,2768-2769,2780-2782,2856-2865,2918,3037-3043
+CLAUDE.md
+  s_6ce5d950f5d705::t_0e56be93ee7a49 37
+README.md
+  s_6ce5d950f5d705::t_abfe0c585f1bb7 57
+docs/Development.md
+  s_6ce5d950f5d705::t_bf4c21bd12f629 43-44
+docs/Usage-Limits.md
+  s_6ce5d950f5d705::t_89e018ffcac0c7 42-48
+docs/Usage.md
+  s_6ce5d950f5d705::t_ec4c0e27597a4c 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b0310dc80d63f58c30f695c1f2ab44abb1be0f13",
+  "prompts": {},
+  "sessions": {
+    "s_6ce5d950f5d705": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a26ac10b-c58d-49e4-9ad7-b5f4543ab350",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
