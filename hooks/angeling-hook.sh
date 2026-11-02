@@ -74,7 +74,8 @@ echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
       cwd: (.cwd // $p.cwd // ""),
       project: ((.cwd // $p.cwd // "") | base),
       task: $p.task,
-      updated: ($now | tonumber),
+      # A Notification follows PermissionRequest 6 s later: restarting the clock would alert twice.
+      updated: (if .hook_event_name == "Notification" and $p.state == "waiting" then $p.updated else ($now | tonumber) end),
       host: (if $host != "" then $host else $p.host end),
       app: (if $app != "" then $app else $p.app end),
       term: (if $term != "" then $term else $p.term end),
