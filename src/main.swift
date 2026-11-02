@@ -964,9 +964,12 @@ enum UsageLimits {
     #!/bin/bash
     # Claude Code status line wrapper, written by Angeling (menu: 📊 แสดง limit การใช้งาน).
     # Saves the status JSON so Angeling can read rate_limits, then runs your own status line, if any.
+    # A new session has no rate_limits until its first reply, so that doesn't replace numbers already saved.
     DIR="$(cd "$(dirname "$0")" && pwd)"
     input=$(cat)
-    tmp=$(mktemp "$DIR/.limits.XXXXXX") && printf '%s' "$input" > "$tmp" && mv -f "$tmp" "$DIR/limits.json"
+    if printf '%s' "$input" | grep -q '"rate_limits"' || ! grep -q '"rate_limits"' "$DIR/limits.json" 2>/dev/null; then
+      tmp=$(mktemp "$DIR/.limits.XXXXXX") && printf '%s' "$input" > "$tmp" && mv -f "$tmp" "$DIR/limits.json"
+    fi
     if [ -s "$DIR/statusline-orig.cmd" ]; then
       printf '%s' "$input" | bash -c "$(cat "$DIR/statusline-orig.cmd")"
     fi
@@ -1035,6 +1038,13 @@ enum UsageLimits {
 
     static func isOurs(_ statusLine: Any?) -> Bool {
         ((statusLine as? [String: Any])?["command"] as? String)?.contains("angeling-pet/statusline.sh") ?? false
+    }
+
+    /// Rewrite the wrapper when an update changed it; settings.json already points at it.
+    static func refreshWrapper() {
+        guard installed(), (try? String(contentsOf: wrapper, encoding: .utf8)) != script else { return }
+        try? script.write(to: wrapper, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
     }
 
     /// Point statusLine at the wrapper, keeping the user's own command to run after it.
@@ -1694,6 +1704,7 @@ final class PetController: NSObject, NSMenuDelegate {
         limitBar.isHidden = true
         // Someone else took the status line over (or Angeling was reinstalled): the limits can't arrive, so stop waiting.
         if d.bool(forKey: "showLimits") && !UsageLimits.installed() { d.set(false, forKey: "showLimits") }
+        if d.bool(forKey: "showLimits") { UsageLimits.refreshWrapper() }
         pollLimits()
         // The toggle only appears while the pointer is over the pet (or the toggle itself).
         toggle.isHidden = true
@@ -2359,7 +2370,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 limitBar.text = limitBarText(week: week, five: five)
             } else {
                 // Say so rather than show nothing: the limits only arrive when a Claude Code status line redraws.
-                limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอ Claude Code…" : "limit: ไม่มีข้อมูล",
+                limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอ Claude Code…" : "limit: ยังไม่มีข้อมูล",
                                                    attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)])
             }
             limitBar.toolTip = limitTooltip()
@@ -2617,7 +2628,7 @@ final class PetController: NSObject, NSMenuDelegate {
         switch limitState {
         case .off: return []
         case .waiting: return ["รอข้อมูลจาก Claude Code…"]
-        case .noData: return ["บัญชีนี้ไม่มีข้อมูล limit"]
+        case .noData: return ["ยังไม่มีข้อมูล limit: ส่งข้อความใน Claude Code สักครั้ง (บัญชี API key ไม่มีข้อมูลนี้)"]
         case let .data(week, five):
             return [("สัปดาห์นี้", week), ("5 ชม.", five)].compactMap { name, win in
                 guard let win else { return nil }
