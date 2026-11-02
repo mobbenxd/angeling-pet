@@ -6,7 +6,8 @@
 |---|---|
 | `src/main.swift` | ตัวแอปทั้งหมด |
 | `hooks/angeling-hook.sh` | hook ของ Claude Code |
-| `scripts/build.sh` | build `.app` |
+| `scripts/build.sh` | build `.app` (ทำไอคอนแอปจาก `spritesheet.webp` ให้ด้วยถ้ามีไฟล์) |
+| `scripts/make-icon.swift` | สร้างไอคอนแอป `.icns` จากเฟรมแรกของท่า idle (ไอคอนไม่ถูก commit เพราะภาพเป็นลิขสิทธิ์ Gravity) |
 | `scripts/fetch-assets.sh` | ดึง sprite และ emote |
 | `install.sh`, `uninstall.sh` | ติดตั้งและถอนการติดตั้ง |
 | `get.sh` | ตัวติดตั้งแบบคำสั่งเดียว (ดาวน์โหลด `Angeling.zip` จาก Release ล่าสุด) |
@@ -49,6 +50,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_UPDATE_CMD="…"` | คำสั่งที่ใช้แทน `get.sh` ตอนอัปเดต |
 | `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
 | `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
+| `ANGELING_SETTINGS=look` | จับภาพหน้าต่างตั้งค่าหมวดนี้แทนตัว Angeling (`general`, `look`, `alerts`, `limits`, `updates`) |
 | `ANGELING_CHARACTER=thunder` | ใช้ตัวละครนี้ (`angeling`, `id` ของเพ็ตใน `pets/` หรือ `id` ใน `characters.json`) |
 | `ANGELING_ANIM=failed` | เล่นท่านี้ (`idle`, `running`, `review`, `waiting`, `failed`, `waving`, `jumping`, `running-left`, `running-right`) |
 | `ANGELING_THEME=dark` | ใช้ธีมนี้ (`classic`, `light`, `dark`, `glass`, `tokyo`, `ragnarok`, `auto`) |

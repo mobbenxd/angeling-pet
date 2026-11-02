@@ -6,7 +6,7 @@ APP="${1:-$HOME/Applications/Angeling.app}"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # macOS 13 matches LSMinimumSystemVersion below; left to itself, swiftc targets the SDK, which can be newer than this Mac.
-swiftc -O -target "${ANGELING_TARGET:-$(uname -m)-apple-macos13}" -o "$APP/Contents/MacOS/Angeling" "$ROOT/src/main.swift" -framework AppKit -framework Carbon -framework EventKit
+swiftc -O -target "${ANGELING_TARGET:-$(uname -m)-apple-macos13}" -o "$APP/Contents/MacOS/Angeling" "$ROOT/src/main.swift" -framework AppKit -framework Carbon -framework EventKit -framework SwiftUI
 # Version: ANGELING_VERSION, else the latest git tag (so source builds get update notices), else "dev".
 TAG=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || true)
 VERSION="${ANGELING_VERSION:-${TAG#v}}"

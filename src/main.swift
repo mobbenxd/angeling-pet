@@ -18,6 +18,7 @@
 import AppKit
 import Carbon.HIToolbox
 import EventKit
+import SwiftUI
 
 let home = FileManager.default.homeDirectoryForCurrentUser
 let baseDir = home.appendingPathComponent(".claude/angeling-pet")
@@ -1875,8 +1876,13 @@ final class PetController: NSObject, NSMenuDelegate {
         reminders.remove(id, deleteEvent: withEvent)
         refresh()
     }
-    @objc func setReminderSound(_ sender: NSMenuItem) {
-        guard let name = sender.representedObject as? String else { return }
+    /// Reminder chimes on offer: (setting value, title). Level Up only when install.sh fetched it.
+    var reminderSoundChoices: [(String, String)] {
+        var c = [("Glass", "Glass"), ("Ping", "Ping"), ("Hero", "Hero"), ("Submarine", "Submarine"), ("Funk", "Funk"), ("off", "ปิดเสียง")]
+        if FileManager.default.fileExists(atPath: levelUpSound.path) { c.insert(("levelup", "Level Up (Ragnarok)"), at: 0) }
+        return c
+    }
+    func setReminderSound(_ name: String) {
         d.set(name, forKey: "reminderSound")
         chime(1)
     }
@@ -2127,80 +2133,11 @@ final class PetController: NSObject, NSMenuDelegate {
             i.submenu = reminderMenu(r, ringing: r.alertAt <= now)
         }
         m.addItem(withTitle: "การเตือนที่ตั้งไว้ (\(reminders.items.count))", action: nil, keyEquivalent: "").submenu = list
-        let sounds = NSMenu()
-        var choices = [("Glass", "Glass"), ("Ping", "Ping"), ("Hero", "Hero"), ("Submarine", "Submarine"), ("Funk", "Funk"), ("ปิดเสียง", "off")]
-        if FileManager.default.fileExists(atPath: levelUpSound.path) { choices.insert(("Level Up (Ragnarok)", "levelup"), at: 0) }
-        for (title, name) in choices {
-            let i = sounds.addItem(withTitle: title, action: #selector(setReminderSound(_:)), keyEquivalent: "")
-            i.target = self; i.representedObject = name; i.state = reminderSound == name ? .on : .off
-        }
-        m.addItem(withTitle: "เสียงเตือน", action: nil, keyEquivalent: "").submenu = sounds
-        if !reminders.calendarAccess { item("ให้สิทธิ์ปฏิทิน…", #selector(openCalendarPrivacy)) }
         m.addItem(.separator())
-        item(activityHidden ? "แสดงกิจกรรม" : "ซ่อนกิจกรรม", #selector(toggleActivity))
         if !forStatusBar { item("ซ่อน Angeling (⌥⌘A)", #selector(togglePet)) }
-        let opts = NSMenu()
-        for (title, key) in [("งานที่สั่ง (prompt)", "showTask"), ("ข้อความล่าสุด / สิ่งที่กำลังทำ", "showText"), ("Task list", "showPlan")] {
-            let i = opts.addItem(withTitle: title, action: #selector(toggleShow(_:)), keyEquivalent: "")
-            i.target = self; i.representedObject = key; i.state = flag(key) ? .on : .off
-        }
-        m.addItem(withTitle: "แสดงในบับเบิล", action: nil, keyEquivalent: "").submenu = opts
-        let themes = NSMenu()
-        for (id, title) in Theme.choices {
-            let i = themes.addItem(withTitle: title, action: #selector(setTheme(_:)), keyEquivalent: "")
-            i.target = self; i.representedObject = id; i.state = themeChoice == id ? .on : .off
-        }
-        m.addItem(withTitle: "ธีม", action: nil, keyEquivalent: "").submenu = themes
-        if !bomberCharacters.isEmpty || !codexPets.isEmpty {
-            let chars = NSMenu()
-            chars.delegate = self
-            // Angeling and the other Codex pets, then the Bomber characters.
-            for group in [[("angeling", "Angeling")] + codexPets.map({ ($0.id, $0.displayName) }), bomberCharacters.map({ ($0.id, $0.name) })] where !group.isEmpty {
-                if chars.numberOfItems > 0 { chars.addItem(.separator()) }
-                for (id, title) in group {
-                    let i = chars.addItem(withTitle: title, action: #selector(setCharacter(_:)), keyEquivalent: "")
-                    i.target = self; i.representedObject = id; i.state = PetController.characterChoice == id ? .on : .off
-                }
-            }
-            m.addItem(withTitle: "ตัวละคร", action: nil, keyEquivalent: "").submenu = chars
-        }
-        item("โผล่ออกมาเมื่อมีงานที่ต้องดู", #selector(togglePop), on: popWhenWaiting)
-        item("เสียงเตือนเมื่อมีงานที่ต้องดู", #selector(toggleWaitSound), on: waitSound)
-        item("แจ้งเตือน LINE", #selector(toggleLine), on: showLine)
-        item("แจ้งเตือน Discord", #selector(toggleDiscord), on: showDiscord)
-        item("📊 แสดง limit การใช้งาน Claude", #selector(toggleLimits), on: showLimits)
-        if showLimits {
-            for line in limitMenuLines() {
-                let i = m.addItem(withTitle: line, action: nil, keyEquivalent: "")
-                i.isEnabled = false
-                i.indentationLevel = 1
-            }
-            let modes = NSMenu()
-            for (title, id) in [("ใช้ไปแล้ว", "used"), ("เหลืออยู่", "left")] {
-                let i = modes.addItem(withTitle: title, action: #selector(setLimitMode(_:)), keyEquivalent: "")
-                i.target = self; i.representedObject = id; i.state = (limitsLeft == (id == "left")) ? .on : .off
-            }
-            let mi = m.addItem(withTitle: "แสดงเป็น", action: nil, keyEquivalent: "")
-            mi.submenu = modes
-            mi.indentationLevel = 1
-            let places = NSMenu()
-            for (title, id) in [("บนบับเบิล (หลอดเมื่อซ่อนบับเบิล)", "auto"), ("บนบับเบิลและหลอด", "both"), ("หลอดใต้ Angeling อย่างเดียว", "bar")] {
-                let i = places.addItem(withTitle: title, action: #selector(setLimitPlace(_:)), keyEquivalent: "")
-                i.target = self; i.representedObject = id; i.state = limitPlace == id ? .on : .off
-            }
-            let pi = m.addItem(withTitle: "แสดงที่", action: nil, keyEquivalent: "")
-            pi.submenu = places
-            pi.indentationLevel = 1
-        }
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
         m.addItem(.separator())
-        let upd = NSMenu()
-        upd.addItem(withTitle: "Angeling \(Updater.current)", action: nil, keyEquivalent: "").isEnabled = false
-        upd.addItem(withTitle: "ตรวจหาเวอร์ชันใหม่ตอนนี้", action: #selector(checkUpdatesNow), keyEquivalent: "").target = self
-        let auto = upd.addItem(withTitle: "ตรวจอัตโนมัติ (ทุก 6 ชั่วโมง)", action: #selector(toggleAutoUpdateCheck), keyEquivalent: "")
-        auto.target = self
-        auto.state = autoUpdateCheck ? .on : .off
-        m.addItem(withTitle: "อัปเดต", action: nil, keyEquivalent: "").submenu = upd
+        item("ตั้งค่า… (⌘,)", #selector(openSettings))
         item("ปิด Angeling", #selector(quit))
         return m
     }
@@ -2211,14 +2148,6 @@ final class PetController: NSObject, NSMenuDelegate {
         for i in makeMenu(forStatusBar: true).items { i.menu?.removeItem(i); menu.addItem(i) }
     }
 
-    // The ตัวละคร submenu: hovering a character shows it, leaving goes back to the saved one.
-    func menu(_ menu: NSMenu, willHighlight item: NSMenuItem?) {
-        guard menu !== statusItem.menu else { return }
-        showCharacter(item?.representedObject as? String ?? PetController.characterChoice)
-    }
-    func menuDidClose(_ menu: NSMenu) {
-        if menu !== statusItem.menu { showCharacter(PetController.characterChoice) }
-    }
     func showCharacter(_ id: String) {
         guard id != shownCharacter else { return }
         shownCharacter = id
@@ -2253,20 +2182,16 @@ final class PetController: NSObject, NSMenuDelegate {
         d.set(!flag(k), forKey: k)
         refresh()
     }
-    @objc func togglePop() { popWhenWaiting.toggle(); refresh() }
-    @objc func setTheme(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
+    func setTheme(_ id: String) {
         d.set(id, forKey: "theme")
         refresh()
     }
-    @objc func setCharacter(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
+    func setCharacter(_ id: String) {
         d.set(id, forKey: "character")
         showCharacter(id)
         statusItem.button?.image = statusIcon()
         setOverride("waving", for: 1.2)
     }
-    @objc func toggleWaitSound() { d.set(!waitSound, forKey: "waitSound") }
     @objc func toggleLine() { d.set(!showLine, forKey: "showLine"); lineDismissed = nil; pollLine(); refresh() }
     @objc func openLine() { setOverride("waving", for: 0.8); LineWatch.open() }
     @objc func dismissLine() { lineDismissed = lineUnread; refresh() }
@@ -2281,6 +2206,8 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
     @objc func quit() { NSApp.terminate(nil) }
+    lazy var settings = SettingsWindow(controller: self)
+    @objc func openSettings() { settings.show() }
 
     // MARK: state -> view
 
@@ -2720,13 +2647,13 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
 
-    @objc func setLimitPlace(_ sender: NSMenuItem) {
-        d.set(sender.representedObject as? String, forKey: "limitPlace")
+    func setLimitPlace(_ id: String) {
+        d.set(id, forKey: "limitPlace")
         refresh()
     }
 
-    @objc func setLimitMode(_ sender: NSMenuItem) {
-        d.set(sender.representedObject as? String, forKey: "limitMode")
+    func setLimitMode(_ id: String) {
+        d.set(id, forKey: "limitMode")
         refresh()
     }
 
@@ -2735,6 +2662,261 @@ final class PetController: NSObject, NSMenuDelegate {
         guard let id = sender.representedObject as? String,
               let s = sessions.first(where: { $0.0.session == id })?.0 else { return }
         dismiss(s)
+    }
+}
+
+// MARK: - Settings window (ตั้งค่า… / ⌘,)
+// SwiftUI forms in toolbar tabs. Every value is read from and written through PetController,
+// so the menu, the pet and this window never disagree. Changes apply at once; there is no Save.
+
+enum SettingsTab: String, CaseIterable {
+    case general, look, alerts, limits, updates
+    var title: String {
+        switch self {
+        case .general: return "ทั่วไป"
+        case .look: return "หน้าตา"
+        case .alerts: return "แจ้งเตือน"
+        case .limits: return "Claude limit"
+        case .updates: return "อัปเดต"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .general: return "gearshape"
+        case .look: return "paintpalette"
+        case .alerts: return "bell"
+        case .limits: return "chart.bar"
+        case .updates: return "arrow.down.circle"
+        }
+    }
+    var height: CGFloat {
+        switch self {
+        case .general: return 360
+        case .look: return 560
+        case .alerts: return 280
+        case .limits: return 300
+        case .updates: return 250
+        }
+    }
+}
+
+final class SettingsModel: ObservableObject {
+    unowned let c: PetController
+    init(_ c: PetController) { self.c = c }
+
+    /// A binding that reads the live value and writes through `set`, then redraws.
+    func bind<T>(_ get: @escaping () -> T, _ set: @escaping (T) -> Void) -> Binding<T> {
+        Binding(get: get, set: { [weak self] v in set(v); self?.objectWillChange.send() })
+    }
+    func flag(_ key: String) -> Binding<Bool> {
+        bind({ self.c.flag(key) }, { self.c.d.set($0, forKey: key); self.c.refresh() })
+    }
+
+    struct Character: Identifiable {
+        let id: String
+        let name: String
+        let thumb: NSImage?
+    }
+    /// Angeling and the other Codex pets, then the Bomber characters; each with its first idle frame.
+    lazy var characterGroups: [[Character]] = {
+        func make(_ id: String, _ name: String) -> Character {
+            let s = PetController.sprite(id, angeling: c.angeling)
+            return Character(id: id, name: name, thumb: s.frame(row: s.anims["idle"]?.row ?? 0, col: 0))
+        }
+        return [[make("angeling", "Angeling")] + codexPets.map { make($0.id, $0.displayName) },
+                bomberCharacters.map { make($0.id, $0.name) }].filter { !$0.isEmpty }
+    }()
+}
+
+struct SettingsPane: View {
+    let tab: SettingsTab
+    @ObservedObject var m: SettingsModel
+
+    var body: some View {
+        Form { content }
+            .formStyle(.grouped)
+            .toggleStyle(.switch)
+            .frame(width: 480, height: tab.height)
+    }
+
+    @ViewBuilder var content: some View {
+        let c = m.c
+        switch tab {
+        case .general:
+            Section {
+                Toggle("ซ่อนกิจกรรม", isOn: m.bind({ c.activityHidden }, { if $0 != c.activityHidden { c.toggleActivity() } }))
+                Toggle("โผล่ออกมาเมื่อมีงานที่ต้องดู", isOn: m.bind({ c.popWhenWaiting }, { c.popWhenWaiting = $0; c.refresh() }))
+                Toggle("เสียงเตือนเมื่อมีงานที่ต้องดู", isOn: m.flag("waitSound"))
+            } footer: {
+                Text("ซ่อนกิจกรรมแล้ว บับเบิลจะขึ้นเฉพาะงานที่ต้องดูและการเตือนที่กำลังดัง").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("แสดงในบับเบิล") {
+                Toggle("งานที่สั่ง (prompt)", isOn: m.flag("showTask"))
+                Toggle("ข้อความล่าสุด / สิ่งที่กำลังทำ", isOn: m.flag("showText"))
+                Toggle("Task list", isOn: m.flag("showPlan"))
+            }
+        case .look:
+            Section {
+                Picker("ธีม", selection: m.bind({ c.themeChoice }, { c.setTheme($0) })) {
+                    ForEach(Theme.choices, id: \.0) { Text($0.1).tag($0.0) }
+                }
+            }
+            if !bomberCharacters.isEmpty || !codexPets.isEmpty {
+                Section("ตัวละคร") {
+                    ForEach(Array(m.characterGroups.enumerated()), id: \.offset) { _, group in
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+                            ForEach(group) { ch in characterCell(ch) }
+                        }
+                    }
+                }
+            }
+        case .alerts:
+            Section {
+                Toggle("แจ้งเตือน LINE", isOn: m.bind({ c.showLine }, { if $0 != c.showLine { c.toggleLine() } }))
+                Toggle("แจ้งเตือน Discord", isOn: m.bind({ c.showDiscord }, { if $0 != c.showDiscord { c.toggleDiscord() } }))
+            } footer: {
+                Text("แสดงแค่จำนวนที่ยังไม่อ่าน จาก badge บน Dock").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("การเตือน") {
+                Picker("เสียงเตือน", selection: m.bind({ c.reminderSound }, { c.setReminderSound($0) })) {
+                    ForEach(c.reminderSoundChoices, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                LabeledContent("ปฏิทิน") {
+                    if c.reminders.calendarAccess {
+                        Text("ได้รับสิทธิ์แล้ว").foregroundStyle(.secondary)
+                    } else {
+                        Button("ให้สิทธิ์…") { c.openCalendarPrivacy() }
+                    }
+                }
+            }
+        case .limits:
+            Section {
+                Toggle("แสดง limit การใช้งาน Claude", isOn: m.bind({ c.showLimits }, { if $0 != c.showLimits { c.toggleLimits() } }))
+                if c.showLimits {
+                    ForEach(c.limitMenuLines(), id: \.self) { Text($0).foregroundStyle(.secondary) }
+                }
+            } footer: {
+                Text("อ่านจาก status line ของ Claude Code").font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("แสดงเป็น", selection: m.bind({ c.limitsLeft ? "left" : "used" }, { c.setLimitMode($0) })) {
+                    Text("ใช้ไปแล้ว").tag("used")
+                    Text("เหลืออยู่").tag("left")
+                }
+                Picker("แสดงที่", selection: m.bind({ c.limitPlace }, { c.setLimitPlace($0) })) {
+                    Text("บนบับเบิล (หลอดเมื่อซ่อนบับเบิล)").tag("auto")
+                    Text("บนบับเบิลและหลอด").tag("both")
+                    Text("หลอดใต้ Angeling อย่างเดียว").tag("bar")
+                }
+            }
+            .disabled(!c.showLimits)
+        case .updates:
+            Section {
+                LabeledContent("เวอร์ชันที่ใช้อยู่", value: Updater.current)
+                if c.updateAvailable {
+                    LabeledContent("มีเวอร์ชันใหม่", value: c.latestVersion ?? "")
+                    HStack {
+                        Spacer()
+                        Button("ดูว่ามีอะไรใหม่") { c.openReleasePage() }
+                        Button(c.updating ? "กำลังอัปเดต…" : "อัปเดตเลย") { c.runUpdate() }
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(c.updating)
+                    }
+                }
+            }
+            Section {
+                Toggle("ตรวจอัตโนมัติ (ทุก 6 ชั่วโมง)", isOn: m.bind({ c.autoUpdateCheck }, { if $0 != c.autoUpdateCheck { c.toggleAutoUpdateCheck() } }))
+                HStack {
+                    Spacer()
+                    Button("ตรวจหาเวอร์ชันใหม่ตอนนี้") { c.checkUpdatesNow() }
+                }
+            }
+        }
+    }
+
+    func characterCell(_ ch: SettingsModel.Character) -> some View {
+        let on = PetController.characterChoice == ch.id
+        return Button {
+            m.c.setCharacter(ch.id)
+            m.objectWillChange.send()
+        } label: {
+            VStack(spacing: 2) {
+                if let t = ch.thumb {
+                    Image(nsImage: t).resizable().interpolation(.none).aspectRatio(contentMode: .fit).frame(height: 52)
+                } else {
+                    Color.clear.frame(height: 52)
+                }
+                Text(ch.name).font(.caption2).lineLimit(1).truncationMode(.tail)
+            }
+            .padding(4)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 8).fill(on ? Color.accentColor.opacity(0.2) : Color.clear))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(on ? Color.accentColor : Color.clear, lineWidth: 1.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(ch.name)
+    }
+}
+
+/// Toolbar tabs that resize the window to each pane and remember the last one.
+final class SettingsTabs: NSTabViewController {
+    override func tabView(_ tabView: NSTabView, didSelect item: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: item)
+        guard let item, let tab = SettingsTab(rawValue: item.identifier as? String ?? "") else { return }
+        UserDefaults.standard.set(tab.rawValue, forKey: "settingsTab")
+        guard let w = view.window else { return }
+        let content = NSSize(width: 480, height: tab.height)
+        var f = w.frameRect(forContentRect: NSRect(origin: .zero, size: content))
+        f.origin = NSPoint(x: w.frame.minX, y: w.frame.maxY - f.height)   // keep the top edge still
+        w.setFrame(f, display: true, animate: w.isVisible)
+    }
+}
+
+final class SettingsWindow: NSObject, NSWindowDelegate {
+    let model: SettingsModel
+    let tabs = SettingsTabs()
+    let window: NSWindow
+    var timer: Timer?
+
+    init(controller: PetController) {
+        model = SettingsModel(controller)
+        tabs.tabStyle = .toolbar
+        for t in SettingsTab.allCases {
+            let h = NSHostingController(rootView: SettingsPane(tab: t, m: model))
+            let item = NSTabViewItem(viewController: h)
+            item.identifier = t.rawValue
+            item.label = t.title
+            item.image = NSImage(systemSymbolName: t.symbol, accessibilityDescription: t.title)
+            tabs.addTabViewItem(item)
+        }
+        window = NSWindow(contentViewController: tabs)
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        super.init()
+        window.delegate = self
+    }
+
+    func show(_ tab: SettingsTab? = nil) {
+        let pick = tab ?? SettingsTab(rawValue: UserDefaults.standard.string(forKey: "settingsTab") ?? "") ?? .general
+        if !window.isVisible {
+            tabs.selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: pick) ?? 0
+            tabs.tabView(tabs.tabView, didSelect: tabs.tabView.selectedTabViewItem)
+            window.center()
+        } else if let tab {
+            tabs.selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: tab) ?? 0
+        }
+        // Accessory apps don't come forward on their own; without this the window opens behind the front app.
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        // Keep live values fresh (limits, update status, changes made from the menu or the pet).
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.model.objectWillChange.send() }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        timer?.invalidate()
+        timer = nil
     }
 }
 
@@ -2773,6 +2955,23 @@ guard let sheet = SpriteSheet(url: baseDir.appendingPathComponent("spritesheet.w
 let controller = PetController(sheet: sheet)
 registerHotKeys([(kVK_ANSI_A, { controller.togglePet() }), (kVK_ANSI_R, { controller.newReminder() })])
 
+// Never shown (accessory app), but its key equivalents work while one of Angeling's windows has focus:
+// ⌘, opens the settings, ⌘W closes a window, and the Edit items give text fields copy and paste.
+NSApp.mainMenu = {
+    let main = NSMenu()
+    func sub(_ title: String, _ items: [(String, Selector, String, AnyObject?)]) {
+        let menu = NSMenu(title: title)
+        for (t, sel, key, target) in items { menu.addItem(withTitle: t, action: sel, keyEquivalent: key).target = target }
+        main.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = menu
+    }
+    sub("Angeling", [("ตั้งค่า…", #selector(PetController.openSettings), ",", controller)])
+    sub("แก้ไข", [("เลิกทำ", Selector(("undo:")), "z", nil), ("ตัด", #selector(NSText.cut(_:)), "x", nil),
+                  ("คัดลอก", #selector(NSText.copy(_:)), "c", nil), ("วาง", #selector(NSText.paste(_:)), "v", nil),
+                  ("เลือกทั้งหมด", #selector(NSText.selectAll(_:)), "a", nil)])
+    sub("หน้าต่าง", [("ปิด", #selector(NSWindow.performClose(_:)), "w", nil)])
+    return main
+}()
+
 // Debug: ANGELING_UPDATE_NOW=1 starts an update right away (pair with ANGELING_UPDATE_CMD).
 if ProcessInfo.processInfo.environment["ANGELING_UPDATE_NOW"] != nil { controller.runUpdate() }
 
@@ -2790,14 +2989,17 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     if let e = env["ANGELING_EMOTE"] { controller.showEmote(e, for: 10) }
     if let a = env["ANGELING_ANIM"] { controller.setOverride(a, for: 10) }
     if env["ANGELING_LATEST_VERSION"] != nil || env["ANGELING_FAKE_VERSION"] != nil { controller.checkForUpdates(manual: false) }
+    if let t = env["ANGELING_SETTINGS"] { controller.settings.show(SettingsTab(rawValue: t) ?? .general) }
     if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        let v = env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!
+        let windowed = env["ANGELING_FORM"] != nil || env["ANGELING_SETTINGS"] != nil
+        let v = env["ANGELING_SETTINGS"] != nil ? controller.settings.window.contentView!
+              : env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!
         if let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
             v.cacheDisplay(in: v.bounds, to: rep)
             let bg = NSImage(size: v.bounds.size)
             bg.lockFocus()
-            (env["ANGELING_FORM"] != nil ? NSColor.windowBackgroundColor : NSColor(calibratedWhite: 0.35, alpha: 1)).setFill(); v.bounds.fill()
+            (windowed ? NSColor.windowBackgroundColor : NSColor(calibratedWhite: 0.35, alpha: 1)).setFill(); v.bounds.fill()
             rep.draw(in: v.bounds)
             bg.unlockFocus()
             if let t = bg.tiffRepresentation, let b = NSBitmapImageRep(data: t),
