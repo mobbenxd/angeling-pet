@@ -14,7 +14,7 @@
 //   Discord row        unread DMs + @mentions (Dock badge count); click opens Discord
 //   ⌥⌘R                set a reminder (also added to Calendar); Angeling chimes at the time
 //   update row         a newer GitHub release exists; click to install it
-//   limit row / bar    Claude's weekly and 5-hour usage (menu: 📊): the bubble's top row, a bar under the pet, or both
+//   limit row / label  Claude's weekly and 5-hour usage (menu: 📊): the bubble's top row, a label under the pet, or both
 import AppKit
 import Carbon.HIToolbox
 import EventKit
@@ -930,6 +930,12 @@ func limitColor(_ used: Double) -> NSColor {
     used < 60 ? NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.94, alpha: 1) : used <= 85 ? alarmOrange : alertRed
 }
 
+/// The same scale, lighter, for the dark label under the pet.
+func limitBarColor(_ used: Double) -> NSColor {
+    used < 60 ? NSColor(calibratedRed: 0.55, green: 0.75, blue: 1, alpha: 1)
+        : used <= 85 ? NSColor(calibratedRed: 1, green: 0.66, blue: 0.3, alpha: 1) : NSColor(calibratedRed: 1, green: 0.42, blue: 0.45, alpha: 1)
+}
+
 let thaiDays = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."]
 
 /// "พฤ. 14:00" (or just "16:30" today).
@@ -1058,10 +1064,11 @@ enum UsageLimits {
     static func disable() throws {
         var root = try loadSettings()
         let fm = FileManager.default
+        // limits.json stays: it only refreshes when a Claude Code status line redraws, so deleting it
+        // left the limits blank after turning them back on until the next CLI session.
         defer {
             try? fm.removeItem(at: origJSON)
             try? fm.removeItem(at: origCmd)
-            try? fm.removeItem(at: file)
         }
         guard isOurs(root["statusLine"]) else { return }
         if let d = try? Data(contentsOf: origJSON), let orig = try? JSONSerialization.jsonObject(with: d) {
@@ -1073,29 +1080,19 @@ enum UsageLimits {
     }
 }
 
-/// The limits under the pet while the bubble doesn't show them: one 34×5 bar, the week on top (3 px)
-/// and the 5-hour window under it (2 px); the week fills it all when there is no 5-hour window.
+/// The limits under the pet while the bubble doesn't show them: a small dark label with both
+/// windows' numbers, "5 ชม. 60%  ·  สัปดาห์ 38%", sized to its text.
 final class LimitBar: NSView {
-    var week: LimitWindow?
-    var five: LimitWindow?
-    var remaining = false
+    var text = NSAttributedString()
+    var size: NSSize {
+        let t = text.size()
+        return NSSize(width: ceil(t.width) + 12, height: 16)
+    }
     override func draw(_ dirtyRect: NSRect) {
-        let r = bounds
-        let clip = NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2)
-        NSColor(white: 0, alpha: 0.45).setFill()
-        clip.fill()
-        clip.addClip()
-        func fill(_ w: LimitWindow?, y: CGFloat, h: CGFloat) {
-            guard let w else { return }
-            let share = remaining ? 100 - w.used : w.used
-            limitColor(w.used).setFill()
-            NSRect(x: 0, y: y, width: r.width * CGFloat(share / 100), height: h).fill()
-        }
-        switch (week, five) {
-        case (.some, .some): fill(five, y: 0, h: 2); fill(week, y: 2, h: r.height - 2)
-        case (.some, nil): fill(week, y: 0, h: r.height)
-        default: fill(five, y: 0, h: r.height)
-        }
+        NSColor(white: 0, alpha: 0.55).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
+        let t = text.size()
+        text.draw(at: NSPoint(x: round((bounds.width - t.width) / 2), y: round((bounds.height - t.height) / 2)))
     }
 }
 
@@ -2356,16 +2353,20 @@ final class PetController: NSObject, NSMenuDelegate {
 
         // The limits sit on the bubble's top row; when that row isn't showing, a small bar under the pet does.
         var barShown = false
-        if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), case let .data(week, five) = limitState {
+        if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), limitState != .off {
             barShown = true
-            limitBar.week = week
-            limitBar.five = five
-            limitBar.remaining = limitsLeft
+            if case let .data(week, five) = limitState {
+                limitBar.text = limitBarText(week: week, five: five)
+            } else {
+                // Say so rather than show nothing: the limits only arrive when a Claude Code status line redraws.
+                limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอ Claude Code…" : "limit: ไม่มีข้อมูล",
+                                                   attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)])
+            }
             limitBar.toolTip = limitTooltip()
             limitBar.needsDisplay = true
         }
         limitBar.isHidden = !barShown
-        let petBase: CGFloat = barShown ? 8 : 0
+        let petBase: CGFloat = barShown ? 18 : 0
 
         // Emote floats above the head (like in RO); the bubble moves up to make room for it.
         var emoteRect = NSRect.zero
@@ -2384,7 +2385,8 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         keepOnScreen()
         pet.frame = NSRect(x: (winWidth - petSize.width) / 2, y: petBase, width: petSize.width, height: petSize.height)
-        limitBar.frame = NSRect(x: round((winWidth - 34) / 2), y: 1, width: 34, height: 5)
+        let barSize = limitBar.size
+        limitBar.frame = NSRect(x: round((winWidth - barSize.width) / 2), y: 1, width: barSize.width, height: barSize.height)
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
         // Collapsed lists leave LINE and Discord out, so their counts go on the pet.
         lineBadge.count = (activityHidden || !expanded) && showLine ? lineUnread : 0
@@ -2595,6 +2597,21 @@ final class PetController: NSObject, NSMenuDelegate {
         return out.length > 0 ? out : nil
     }
 
+    /// The label under the pet: the 5-hour window first, since it runs out sooner.
+    func limitBarText(week: LimitWindow?, five: LimitWindow?) -> NSAttributedString {
+        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)]
+        let out = NSMutableAttributedString()
+        for (name, win) in [("5 ชม.", five), ("สัปดาห์", week)] {
+            guard let win else { continue }
+            if out.length > 0 { out.append(NSAttributedString(string: "  ·  ", attributes: label)) }
+            out.append(NSAttributedString(string: name + (limitsLeft ? " เหลือ " : " "), attributes: label))
+            let v = limitsLeft ? 100 - win.used : win.used
+            out.append(NSAttributedString(string: "\(Int(v.rounded()))%",
+                                          attributes: [.font: NSFont.boldSystemFont(ofSize: 10), .foregroundColor: limitBarColor(win.used)]))
+        }
+        return out
+    }
+
     /// One line per window, with the reset time and how long until it.
     func limitMenuLines() -> [String] {
         switch limitState {
@@ -2796,7 +2813,7 @@ struct SettingsPane: View {
                     ForEach(c.limitMenuLines(), id: \.self) { Text($0).foregroundStyle(.secondary) }
                 }
             } footer: {
-                Text("อ่านจาก status line ของ Claude Code").font(.caption).foregroundStyle(.secondary)
+                Text("อ่านจาก status line ของ Claude Code ตัวเลขจะอัปเดตเมื่อ status line แสดงผล").font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Picker("แสดงเป็น", selection: m.bind({ c.limitsLeft ? "left" : "used" }, { c.setLimitMode($0) })) {
@@ -2804,9 +2821,9 @@ struct SettingsPane: View {
                     Text("เหลืออยู่").tag("left")
                 }
                 Picker("แสดงที่", selection: m.bind({ c.limitPlace }, { c.setLimitPlace($0) })) {
-                    Text("บนบับเบิล (หลอดเมื่อซ่อนบับเบิล)").tag("auto")
-                    Text("บนบับเบิลและหลอด").tag("both")
-                    Text("หลอดใต้ Angeling อย่างเดียว").tag("bar")
+                    Text("บนบับเบิล (ป้ายเมื่อซ่อนบับเบิล)").tag("auto")
+                    Text("บนบับเบิลและป้าย").tag("both")
+                    Text("ป้ายใต้ Angeling อย่างเดียว").tag("bar")
                 }
             }
             .disabled(!c.showLimits)
