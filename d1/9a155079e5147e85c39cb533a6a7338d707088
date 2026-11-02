@@ -1,0 +1,35 @@
+README.md
+  s_bbc662151f19d5::t_596ca665ca3158 67,158
+docs/Installation.md
+  s_bbc662151f19d5::t_596ca665ca3158 81
+docs/How-It-Works.md
+  s_bbc662151f19d5::t_596ca665ca3158 20
+docs/Custom-Pet.md
+  s_bbc662151f19d5::t_596ca665ca3158 5,55
+docs/Development.md
+  s_bbc662151f19d5::t_596ca665ca3158 95-98
+scripts/import-pet.swift
+  s_bbc662151f19d5::t_594753c591b611 7-9
+  s_bbc662151f19d5::t_03f671e392cb1c 62,87-88
+  s_bbc662151f19d5::t_b41baa54f10c00 51-52,55-61,66-71
+CLAUDE.md
+  s_bbc662151f19d5::t_596ca665ca3158 16,57
+scripts/fetch-assets.sh
+  s_bbc662151f19d5::t_596ca665ca3158 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d19a155079e5147e85c39cb533a6a7338d707088",
+  "prompts": {},
+  "sessions": {
+    "s_bbc662151f19d5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "015568f0-af7a-452d-b5d0-ee37a03b82ff",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
