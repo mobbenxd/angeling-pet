@@ -900,9 +900,12 @@ final class ReminderForm: NSObject {
 }
 
 // MARK: - Usage limits (Claude's 5-hour and weekly rate limits)
-// Claude Code passes rate_limits only to the status line, not to hooks. Turning the feature on
-// points settings.json's statusLine at a small wrapper that saves the status JSON to limits.json
-// and then runs the user's own status line, if they had one. Turning it off puts theirs back.
+// Two sources write limits.json in the status line's shape:
+// - Claude's usage API (what /usage shows), every 5 minutes, with Claude Code's own login token read through
+//   /usr/bin/security. The token is only read; refreshing it is left to Claude Code. Works from any Claude app.
+// - Claude Code passes rate_limits to the status line, not to hooks. Turning the feature on points
+//   settings.json's statusLine at a small wrapper that saves the status JSON and then runs the user's own
+//   status line, if they had one. Turning it off puts theirs back.
 
 struct LimitWindow {
     let used: Double      // percent, 0…100
@@ -1038,6 +1041,70 @@ enum UsageLimits {
 
     static func isOurs(_ statusLine: Any?) -> Bool {
         ((statusLine as? [String: Any])?["command"] as? String)?.contains("angeling-pet/statusline.sh") ?? false
+    }
+
+    /// Fetch the usage API and save it as limits.json. Blocking: call it off the main thread.
+    /// Returns false on 429, so the caller can back off.
+    @discardableResult
+    static func fetchFromAPI() -> Bool {
+        guard let token = loginToken(), let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else { return true }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("claude-cli/2.1.0 (external, cli)", forHTTPHeaderField: "User-Agent")
+        var result: (Data?, Int) = (nil, 0)
+        let done = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            result = (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+            done.signal()
+        }.resume()
+        done.wait()
+        if result.1 == 429 { return false }
+        guard result.1 == 200, let data = result.0,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return true }
+        // {"five_hour": {"utilization": 2.0, "resets_at": "2026-11-02T12:20:00.37+00:00"}, "seven_day": {…}}
+        var rl: [String: Any] = [:]
+        for key in ["five_hour", "seven_day"] {
+            guard let w = root[key] as? [String: Any], let used = (w["utilization"] as? NSNumber)?.doubleValue else { continue }
+            var win: [String: Any] = ["used_percentage": used]
+            // Resets come as e.g. 12:19:59.99, so round to the minute for the clock shown.
+            if let s = w["resets_at"] as? String, let d = isoDate(s) { win["resets_at"] = Int((d.timeIntervalSince1970 / 60).rounded() * 60) }
+            rl[key] = win
+        }
+        guard !rl.isEmpty, let out = try? JSONSerialization.data(withJSONObject: ["source": "api", "rate_limits": rl]) else { return true }
+        try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+        try? out.write(to: file, options: .atomic)
+        return true
+    }
+
+    /// "2026-11-02T12:20:00.372910+00:00": ISO8601DateFormatter doesn't take six fraction digits, so drop them.
+    /// The rounding above makes up for the dropped fraction.
+    static func isoDate(_ s: String) -> Date? {
+        let plain = s.replacingOccurrences(of: #"\.\d+"#, with: "", options: .regularExpression)
+        return ISO8601DateFormatter().date(from: plain)
+    }
+
+    /// Claude Code's access token, from its Keychain item (macOS) or ~/.claude/.credentials.json.
+    /// An expired token is skipped: Claude Code renews it the next time it runs.
+    static func loginToken() -> String? {
+        var data: Data?
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        p.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        if (try? p.run()) != nil {
+            data = out.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            if p.terminationStatus != 0 { data = nil }
+        }
+        if data == nil { data = try? Data(contentsOf: home.appendingPathComponent(".claude/.credentials.json")) }
+        guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let oauth = root["claudeAiOauth"] as? [String: Any], let token = oauth["accessToken"] as? String else { return nil }
+        if let exp = (oauth["expiresAt"] as? NSNumber)?.doubleValue, exp / 1000 < Date().timeIntervalSince1970 { return nil }
+        return token
     }
 
     /// Rewrite the wrapper when an update changed it; settings.json already points at it.
@@ -1702,10 +1769,10 @@ final class PetController: NSObject, NSMenuDelegate {
         toggle.onClick = { [weak self] in self?.toggleActivity() }
         content.addSubview(limitBar)
         limitBar.isHidden = true
-        // Someone else took the status line over (or Angeling was reinstalled): the limits can't arrive, so stop waiting.
-        if d.bool(forKey: "showLimits") && !UsageLimits.installed() { d.set(false, forKey: "showLimits") }
         if d.bool(forKey: "showLimits") { UsageLimits.refreshWrapper() }
         pollLimits()
+        fetchLimits()
+        Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.fetchLimits() }
         // The toggle only appears while the pointer is over the pet (or the toggle itself).
         toggle.isHidden = true
         pet.onHover = { [weak self] on in self?.hover(on) }
@@ -2370,7 +2437,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 limitBar.text = limitBarText(week: week, five: five)
             } else {
                 // Say so rather than show nothing: the limits only arrive when a Claude Code status line redraws.
-                limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอ Claude Code…" : "limit: ยังไม่มีข้อมูล",
+                limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอข้อมูล…" : "limit: ยังไม่มีข้อมูล",
                                                    attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)])
             }
             limitBar.toolTip = limitTooltip()
@@ -2574,6 +2641,25 @@ final class PetController: NSObject, NSMenuDelegate {
 
     // MARK: usage limits
 
+    var limitFetching = false
+    var limitBackoff = Date.distantPast
+
+    /// Asks Claude's usage API (every 5 minutes, and when the limits are turned on); 30 minutes' rest after a 429.
+    func fetchLimits() {
+        guard showLimits, !limitFetching, Date() > limitBackoff,
+              ProcessInfo.processInfo.environment["ANGELING_LIMITS"] == nil else { return }
+        limitFetching = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let ok = UsageLimits.fetchFromAPI()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.limitFetching = false
+                if !ok { self.limitBackoff = Date().addingTimeInterval(1800) }
+                self.pollLimits()
+            }
+        }
+    }
+
     func pollLimits() {
         let s = showLimits ? UsageLimits.read() : .off
         if s != limitState { limitState = s }
@@ -2627,7 +2713,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func limitMenuLines() -> [String] {
         switch limitState {
         case .off: return []
-        case .waiting: return ["รอข้อมูลจาก Claude Code…"]
+        case .waiting: return ["รอข้อมูลจาก Claude…"]
         case .noData: return ["ยังไม่มีข้อมูล limit: ส่งข้อความใน Claude Code สักครั้ง (บัญชี API key ไม่มีข้อมูลนี้)"]
         case let .data(week, five):
             return [("สัปดาห์นี้", week), ("5 ชม.", five)].compactMap { name, win in
@@ -2672,6 +2758,7 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         d.set(on, forKey: "showLimits")
         pollLimits()
+        fetchLimits()
         refresh()
     }
 
@@ -2824,7 +2911,7 @@ struct SettingsPane: View {
                     ForEach(c.limitMenuLines(), id: \.self) { Text($0).foregroundStyle(.secondary) }
                 }
             } footer: {
-                Text("อ่านจาก status line ของ Claude Code ตัวเลขจะอัปเดตเมื่อ status line แสดงผล").font(.caption).foregroundStyle(.secondary)
+                Text("อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code) และจาก status line ของ Claude Code").font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Picker("แสดงเป็น", selection: m.bind({ c.limitsLeft ? "left" : "used" }, { c.setLimitMode($0) })) {
