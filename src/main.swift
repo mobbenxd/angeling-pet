@@ -212,6 +212,7 @@ struct SessionState: Decodable {
     let kittyWin: String?    // KITTY_WINDOW_ID when the session runs straight in kitty
     let kittyListen: String? // KITTY_LISTEN_ON (set only when kitty.conf has listen_on)
     let root: String?        // CLAUDE_PROJECT_DIR: where the session started, unlike cwd it never moves
+    let transcript: String?  // Claude's session log, the only trace of a cancelled prompt
 }
 
 func loadSessions() -> [SessionState] {
@@ -229,8 +230,22 @@ func loadSessions() -> [SessionState] {
     return out
 }
 
+/// Esc on a permission prompt fires no hook and only adds this line to the transcript. A later
+/// assistant line means a new turn, so an old marker can't hide a real prompt.
+/// ponytail: matches Claude Code's own text; if that changes, the row just stays red until the next prompt.
+func promptCancelled(_ s: SessionState) -> Bool {
+    guard let path = s.transcript, let f = FileHandle(forReadingAtPath: path),
+          let mod = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date,
+          mod.timeIntervalSince1970 > s.updated ?? 0, let end = try? f.seekToEnd() else { return false }
+    try? f.seek(toOffset: end > 8192 ? end - 8192 : 0)
+    let tail = String(decoding: (try? f.readToEnd()) ?? Data(), as: UTF8.self)
+    guard let mark = tail.range(of: "[Request interrupted by user for tool use]", options: .backwards) else { return false }
+    return !tail[mark.upperBound...].contains("\"type\":\"assistant\"")
+}
+
 /// What a session means right now, after aging out transient states.
 func effective(_ s: SessionState, now: Double) -> String {
+    if s.state == "waiting" && promptCancelled(s) { return "idle" }
     let age = now - (s.updated ?? 0)
     switch s.state ?? "idle" {
     case "running", "review": return age > 600 ? "idle" : s.state!

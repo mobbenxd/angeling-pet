@@ -86,7 +86,8 @@ echo "$INPUT" | $JQ -c --arg now "$(date +%s)" \
       herdrSock: (if $herdrSock != "" then $herdrSock else $p.herdrSock end),
       kittyWin: (if $kittyWin != "" then $kittyWin else $p.kittyWin end),
       kittyListen: (if $kittyListen != "" then $kittyListen else $p.kittyListen end),
-      root: (if $root != "" then $root else $p.root end)
+      root: (if $root != "" then $root else $p.root end),
+      transcript: (.transcript_path // $p.transcript)
     }
   + ( if .hook_event_name == "SessionStart" then {state: "idle", text: "พร้อมแล้ว~"}
       elif .hook_event_name == "UserPromptSubmit" then
