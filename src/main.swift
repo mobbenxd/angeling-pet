@@ -917,30 +917,51 @@ struct LimitWindow {
     let resetsAt: Date?
 }
 
+/// A limit beyond the session and weekly ones: a model's or surface's own week (Fable), or a meter this app doesn't know.
+struct ScopedLimit {
+    let key, name, long: String   // `key` is unique: two rows can share a name
+    let weekly: Bool
+    let window: LimitWindow
+}
+
+/// One limit the account has: `key` names its setting, `short` is for the pet, `long` for the lists.
+struct LimitMeter {
+    let key, short, long: String
+    let span: TimeInterval?   // the window's length, when known
+    let window: LimitWindow
+    /// Going faster than time passes: at least 25% used and 10 points ahead of the share of the window gone.
+    var ahead: Bool {
+        guard let span, let r = window.resetsAt, window.used >= 25 else { return false }
+        return window.used >= (1 - r.timeIntervalSinceNow / span) * 100 + 10
+    }
+}
+
 enum LimitState: Equatable {
     case off, waiting, noData
-    case data(week: LimitWindow?, five: LimitWindow?)
+    case data(week: LimitWindow?, five: LimitWindow?, scoped: [ScopedLimit])
     static func == (a: LimitState, b: LimitState) -> Bool { a.signature == b.signature }
     var signature: String {
         switch self {
         case .off: return "off"
         case .waiting: return "wait"
         case .noData: return "none"
-        case let .data(w, f):
+        case let .data(w, f, scoped):
             func s(_ x: LimitWindow?) -> String { x.map { "\(Int($0.used.rounded()))@\(Int($0.resetsAt?.timeIntervalSince1970 ?? 0))" } ?? "-" }
-            return "w\(s(w))f\(s(f))"
+            return "w\(s(w))f\(s(f))" + scoped.map { "\($0.name)\(s($0.window))" }.joined()
         }
     }
 }
 
-/// Bar and number colour: blue, then orange from 60%, red above 85% (always by the share used).
+/// Bar and number colour: blue, yellow from 50%, orange from 70%, red above 85% (always by the share used).
 func limitColor(_ used: Double) -> NSColor {
-    used < 60 ? NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.94, alpha: 1) : used <= 85 ? alarmOrange : alertRed
+    used < 50 ? NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.94, alpha: 1)
+        : used < 70 ? NSColor(calibratedRed: 0.8, green: 0.6, blue: 0, alpha: 1) : used <= 85 ? alarmOrange : alertRed
 }
 
 /// The same scale, lighter, for the dark label under the pet.
 func limitBarColor(_ used: Double) -> NSColor {
-    used < 60 ? NSColor(calibratedRed: 0.55, green: 0.75, blue: 1, alpha: 1)
+    used < 50 ? NSColor(calibratedRed: 0.55, green: 0.75, blue: 1, alpha: 1)
+        : used < 70 ? NSColor(calibratedRed: 1, green: 0.86, blue: 0.3, alpha: 1)
         : used <= 85 ? NSColor(calibratedRed: 1, green: 0.66, blue: 0.3, alpha: 1) : NSColor(calibratedRed: 1, green: 0.42, blue: 0.45, alpha: 1)
 }
 
@@ -965,6 +986,12 @@ enum UsageLimits {
     static let apiFile = baseDir.appendingPathComponent("limits-api.json")
     /// How long the API's numbers beat the status line's.
     static let apiFresh: TimeInterval = 15 * 60
+    /// Numbers older than this show dimmed: the token has probably expired, and nothing else says so.
+    static let staleAfter: TimeInterval = 30 * 60
+    /// When the numbers on show were saved.
+    static var updated: Date?
+    private static var statusNumbers: String?
+    private static var statusChanged: Date?
     static let wrapper = baseDir.appendingPathComponent("statusline.sh")
     static let origJSON = baseDir.appendingPathComponent("statusline-orig.json")
     static let origCmd = baseDir.appendingPathComponent("statusline-orig.cmd")
@@ -990,31 +1017,49 @@ enum UsageLimits {
 
     struct Failure: LocalizedError { let errorDescription: String? }
 
-    /// What limits.json says now. Debug: ANGELING_LIMITS="62,40" (week,5h), "71" (week only), "none", "wait".
+    /// What limits.json says now. Debug: ANGELING_LIMITS="62,40" (week,5h), "71" (week only), "62,,30" (week, Fable, no 5h),
+    /// "none", "wait", "@reply.json" (a usage API reply to parse), or "files" (the saved files, without asking the API).
     static func read() -> LimitState {
-        if let fake = ProcessInfo.processInfo.environment["ANGELING_LIMITS"] {
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_LIMITS"], fake != "files" {
             if fake == "none" { return .noData }
             if fake == "wait" { return .waiting }
-            let p = fake.split(separator: ",").compactMap { Double($0) }
-            let week = p.first.map { LimitWindow(used: $0, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600)) }
-            let five = p.count > 1 ? LimitWindow(used: p[1], resetsAt: Date().addingTimeInterval(80 * 60)) : nil
-            return .data(week: week, five: five)
+            if fake.hasPrefix("@") {
+                return windows((try? Data(contentsOf: URL(fileURLWithPath: String(fake.dropFirst())))).flatMap(converted)) ?? .noData
+            }
+            let p = fake.split(separator: ",", omittingEmptySubsequences: false).map { Double($0) }
+            let week = p[0].map { LimitWindow(used: $0, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600)) }
+            let five = p.count > 1 ? p[1].map { LimitWindow(used: $0, resetsAt: Date().addingTimeInterval(80 * 60)) } : nil
+            let fable = p.count > 2 ? p[2].map { ScopedLimit(key: "Fable", name: "Fable", long: "weekly (Fable)", weekly: true, window: LimitWindow(used: $0, resetsAt: week?.resetsAt)) } : nil
+            return .data(week: week, five: five, scoped: fable.map { [$0] } ?? [])
         }
         let fm = FileManager.default
-        let api = windows(apiFile), status = windows(file)
-        let apiAge = ((try? fm.attributesOfItem(atPath: apiFile.path))?[.modificationDate] as? Date).map { -$0.timeIntervalSinceNow }
-        if let api, let age = apiAge, age < apiFresh { return api }
-        if let w = status ?? api { return w }
+        let api = windows(try? Data(contentsOf: apiFile)), status = windows(try? Data(contentsOf: file))
+        func saved(_ url: URL) -> Date? { (try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date }
+        let apiDate = saved(apiFile)
+        // An idle session keeps rewriting old numbers, so the status line's age counts from when they last changed.
+        if status?.signature != statusNumbers {
+            statusNumbers = status?.signature
+            statusChanged = saved(file)
+        }
+        // Fresh API numbers always win.
+        if let api, let d = apiDate, -d.timeIntervalSinceNow < apiFresh { updated = d; return api }
+        if let api, let a = apiDate, status == nil || statusChanged ?? .distantPast < a { updated = a; return api }
+        updated = status == nil ? nil : statusChanged
+        // The status line often has no rows, so scoped limits come from the API's last reply.
+        if case let .data(week, five, scoped)? = status, scoped.isEmpty, case let .data(_, _, apiScoped)? = api {
+            return .data(week: week, five: five, scoped: apiScoped)
+        }
+        if let status { return status }
         return fm.fileExists(atPath: file.path) || fm.fileExists(atPath: apiFile.path) ? .noData : .waiting
     }
 
-    /// The windows in one saved file, or nil when it has none.
-    private static func windows(_ url: URL) -> LimitState? {
-        guard let data = try? Data(contentsOf: url),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+    /// The windows in one saved file, or nil when it has none. Which meters apply depends on the plan (Ultra has no
+    /// session one), so `limits`, the server's own rows, decide; five_hour and seven_day are for replies without those rows.
+    private static func windows(_ data: Data?) -> LimitState? {
+        guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rl = root["rate_limits"] as? [String: Any] else { return nil }
-        func window(_ key: String) -> LimitWindow? {
-            guard let w = rl[key] as? [String: Any], let used = (w["used_percentage"] as? NSNumber)?.doubleValue else { return nil }
+        func window(_ w: [String: Any]?, _ usedKey: String) -> LimitWindow? {
+            guard let w, let used = (w[usedKey] as? NSNumber)?.doubleValue else { return nil }
             var reset: Date?
             if let n = w["resets_at"] as? NSNumber {
                 let t = n.doubleValue
@@ -1026,8 +1071,25 @@ enum UsageLimits {
             if let r = reset, r < Date() { return LimitWindow(used: 0, resetsAt: nil) }
             return LimitWindow(used: min(max(used, 0), 100), resetsAt: reset)
         }
-        let week = window("seven_day"), five = window("five_hour")
-        return week == nil && five == nil ? nil : .data(week: week, five: five)
+        let rows = rl["limits"] as? [[String: Any]] ?? []
+        func row(_ kind: String) -> LimitWindow? { window(rows.first { $0["kind"] as? String == kind }, "percent") }
+        // A plan's rows leave out what it doesn't have, so the old fields only count when neither main row came.
+        let bare = row("weekly_all") == nil && row("session") == nil
+        let week = bare ? window(rl["seven_day"] as? [String: Any], "used_percentage") : row("weekly_all")
+        let five = bare ? window(rl["five_hour"] as? [String: Any], "used_percentage") : row("session")
+        var names = Set<String>()
+        let scoped = rows.compactMap { r -> ScopedLimit? in
+            let kind = r["kind"] as? String ?? ""
+            guard kind != "session", kind != "weekly_all", let win = window(r, "percent") else { return nil }
+            let scope = r["scope"] as? [String: Any]
+            let on = scope?["model"] as? [String: Any] ?? scope?["surface"] as? [String: Any]
+            // A meter this app doesn't know still shows, under its kind.
+            let name = on?["display_name"] as? String ?? kind.replacingOccurrences(of: "_", with: " ")
+            let weekly = kind == "weekly_scoped"
+            let key = names.insert(name).inserted ? name : "\(kind):\(name)"
+            return ScopedLimit(key: key, name: name, long: weekly ? "weekly (\(name))" : name, weekly: weekly, window: win)
+        }
+        return week == nil && five == nil && scoped.isEmpty ? nil : .data(week: week, five: five, scoped: scoped)
     }
 
     private static func loadSettings() throws -> [String: Any] {
@@ -1074,25 +1136,33 @@ enum UsageLimits {
         URLSession.shared.dataTask(with: req) { data, resp, _ in
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if status == 401 { cachedToken = nil }  // Claude Code renewed it; read the new one next time
-            if status == 200, let data { save(data) }
+            if status == 200, let data, let out = converted(data) {
+                try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
+                try? out.write(to: apiFile, options: .atomic)
+            }
             done(status != 429)
         }.resume()
     }
 
-    /// {"five_hour": {"utilization": 2.0, "resets_at": "2026-11-02T12:20:00.37+00:00"}, "seven_day": {…}}
-    private static func save(_ data: Data) {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+    /// {"five_hour": {"utilization": 2.0, "resets_at": "2026-11-02T12:20:00.37+00:00"}, "seven_day": {…},
+    ///  "limits": [{"kind": "weekly_scoped", "percent": 4, "resets_at": "…", "scope": {"model": {"display_name": "Fable"}}}]}
+    /// as the status line's JSON, or nil when it has no numbers.
+    private static func converted(_ data: Data) -> Data? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        // Resets come as e.g. 12:19:59.99, so round to the minute for the clock shown.
+        func minute(_ s: Any?) -> Int? { (s as? String).flatMap(isoDate).map { Int(($0.timeIntervalSince1970 / 60).rounded() * 60) } }
         var rl: [String: Any] = [:]
         for key in ["five_hour", "seven_day"] {
             guard let w = root[key] as? [String: Any], let used = (w["utilization"] as? NSNumber)?.doubleValue else { continue }
             var win: [String: Any] = ["used_percentage": used]
-            // Resets come as e.g. 12:19:59.99, so round to the minute for the clock shown.
-            if let s = w["resets_at"] as? String, let d = isoDate(s) { win["resets_at"] = Int((d.timeIntervalSince1970 / 60).rounded() * 60) }
+            if let t = minute(w["resets_at"]) { win["resets_at"] = t }
             rl[key] = win
         }
-        guard !rl.isEmpty, let out = try? JSONSerialization.data(withJSONObject: ["rate_limits": rl]) else { return }
-        try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
-        try? out.write(to: apiFile, options: .atomic)
+        let rows = (root["limits"] as? [[String: Any]] ?? []).filter { $0["percent"] is NSNumber }
+        if !rows.isEmpty {
+            rl["limits"] = rows.map { r in r.merging(["resets_at": minute(r["resets_at"]) ?? NSNull()]) { $1 } }
+        }
+        return rl.isEmpty ? nil : try? JSONSerialization.data(withJSONObject: ["rate_limits": rl])
     }
 
     private static let iso = ISO8601DateFormatter()
@@ -1173,47 +1243,93 @@ enum UsageLimits {
     }
 }
 
-/// The limits under the pet while the bubble doesn't show them. Under the pet a power bar: two outlined
-/// 72 px pills (outline optional) with a gap, the week on top (7 px) and the 5-hour window under it (5 px), or one 8 px pill
-/// when there is only one window; under the bar a small dark
-/// label with both numbers, "5 ชม. 60%  ·  สัปดาห์ 38%". `style` picks "bar", "text" or "both".
+/// The limits under the pet while the bubble doesn't show them. Under the pet a power bar on a dark plate: a named
+/// 48 px pill (outline optional) per limit, in the order of the numbers, the 5-hour window or scoped limit above the week;
+/// under the bar a small dark label with the same numbers, "5hrs. 60%  ·  weekly 38%". `style` picks "bar", "text" or "both".
 final class LimitBar: NSView {
     var text = NSAttributedString()
     var week: LimitWindow?
     var five: LimitWindow?
+    var fiveName = "5hrs."     // the second pill also carries a scoped limit, e.g. Fable
     var remaining = false
     var style = "both"
     var outline = true
-    var barSize: NSSize { NSSize(width: 72, height: week != nil && five != nil ? 14 : 8) }
+    private let pillWidth: CGFloat = 48, pillHeight: CGFloat = 5, pillGap: CGFloat = 2, platePad: CGFloat = 3
+    /// The pills in the order they're drawn, top first. A long scoped name is cut so the plate stays small.
+    private var pills: [(name: String, window: LimitWindow)] {
+        [five.map { (fiveName.count > 8 ? fiveName.prefix(7) + "…" : fiveName, $0) }, week.map { ("weekly", $0) }].compactMap { $0 }
+    }
+    private func pillName(_ s: String) -> NSAttributedString {
+        NSAttributedString(string: s, attributes: [.font: NSFont.systemFont(ofSize: 8), .foregroundColor: usesGlass ? theme.secondary : NSColor(white: 1, alpha: 0.85)])
+    }
+    private var nameWidth: CGFloat { ceil(pills.map { pillName($0.name).size().width }.max() ?? 0) }
+    var barSize: NSSize {
+        let n = CGFloat(pills.count)
+        return NSSize(width: nameWidth + 3 + pillWidth + platePad * 2, height: n * pillHeight + (n - 1) * pillGap + platePad * 2)
+    }
     /// No numbers yet (waiting / no data): only the label, which says so.
+    /// Liquid Glass behind the plates (macOS 26+): siblings under this view, since subviews would cover what it draws.
+    private var glassPlates: [NSView] = []
+    private(set) var usesGlass = false
+    private var barPlate: NSRect? {
+        guard hasBar else { return nil }
+        let b = barSize, sz = size
+        return NSRect(x: round((sz.width - b.width) / 2), y: sz.height - b.height, width: b.width, height: b.height)
+    }
+    private var textPlate: NSRect? {
+        guard hasText else { return nil }
+        let t = textSize
+        return NSRect(x: round((size.width - t.width) / 2), y: 0, width: t.width, height: t.height)
+    }
+
+    /// Call after every move or hide, so the glass follows the plates.
+    func syncGlass() {
+        #if compiler(>=6.2)
+        guard #available(macOS 26, *), let parent = superview else { return }
+        if glassPlates.isEmpty {
+            glassPlates = [GlassBackground(frame: .zero), GlassBackground(frame: .zero)]
+            for g in glassPlates {
+                (g as? GlassBackground)?.cornerRadius = 7
+                parent.addSubview(g, positioned: .below, relativeTo: self)
+            }
+        }
+        usesGlass = theme.glassTint != nil
+        for (g, plate) in zip(glassPlates, [barPlate, textPlate]) {
+            g.isHidden = isHidden || !usesGlass || plate == nil
+            guard let plate else { continue }
+            (g as? GlassBackground)?.tintColor = theme.glassTint
+            g.frame = plate.offsetBy(dx: frame.minX, dy: frame.minY)
+        }
+        #endif
+    }
+
     var hasBar: Bool { style != "text" && (week != nil || five != nil) }
     var hasText: Bool { style != "bar" || !hasBar }
-    var textSize: NSSize { NSSize(width: ceil(text.size().width) + 12, height: 16) }
+    var textSize: NSSize { NSSize(width: ceil(text.size().width) + 10, height: 14) }
     var size: NSSize {
         let t = hasText ? textSize : .zero
         let b = hasBar ? barSize : .zero
         return NSSize(width: max(t.width, b.width), height: t.height + b.height + (hasBar && hasText ? 3 : 0))
     }
     override func draw(_ dirtyRect: NSRect) {
-        let sz = size
-        if hasBar {
-            let b = barSize
-            drawBar(NSRect(x: round((sz.width - b.width) / 2), y: sz.height - b.height, width: b.width, height: b.height))
-        }
-        if hasText {
-            let t = textSize
-            let r = NSRect(x: round((sz.width - t.width) / 2), y: 0, width: t.width, height: t.height)
-            NSColor(white: 0, alpha: 0.55).setFill()
-            NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill()
+        if let b = barPlate { drawBar(b) }
+        if let r = textPlate {
+            if !usesGlass {
+                NSColor(white: 0, alpha: 0.55).setFill()
+                NSBezierPath(roundedRect: r, xRadius: 7, yRadius: 7).fill()
+            }
             let ts = text.size()
             text.draw(at: NSPoint(x: r.minX + round((r.width - ts.width) / 2), y: round((r.height - ts.height) / 2)))
         }
     }
     private func drawBar(_ r: NSRect) {
-        // One pill per window: a dark track with a light outline, filled in the window's colour.
-        func pill(_ w: LimitWindow?, y: CGFloat, h: CGFloat) {
-            guard let w else { return }
-            let track = NSRect(x: r.minX, y: y, width: r.width, height: h)
+        if !usesGlass {
+            NSColor(white: 0, alpha: 0.55).setFill()
+            NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6).fill()
+        }
+        let names = nameWidth
+        func pill(_ w: LimitWindow, y: CGFloat, h: CGFloat) {
+            let track = NSRect(x: r.minX + platePad + names + 3, y: y, width: pillWidth, height: h)
             let shape = NSBezierPath(roundedRect: track, xRadius: h / 2, yRadius: h / 2)
             NSColor(white: 0.08, alpha: 0.9).setFill()
             shape.fill()
@@ -1221,7 +1337,8 @@ final class LimitBar: NSView {
             shape.addClip()
             let share = remaining ? 100 - w.used : w.used
             // The mockup's stronger colours: the label's lighter ones look washed out as a fill.
-            (w.used < 60 ? NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.94, alpha: 1)
+            (w.used < 50 ? NSColor(calibratedRed: 0.36, green: 0.55, blue: 0.94, alpha: 1)
+                : w.used < 70 ? NSColor(calibratedRed: 0.98, green: 0.8, blue: 0.25, alpha: 1)
                 : w.used <= 85 ? NSColor(calibratedRed: 0.95, green: 0.6, blue: 0.23, alpha: 1)
                 : NSColor(calibratedRed: 1, green: 0.48, blue: 0.48, alpha: 1)).setFill()
             NSRect(x: track.minX, y: y, width: round(track.width * CGFloat(share / 100)), height: h).fill()
@@ -1232,11 +1349,12 @@ final class LimitBar: NSView {
             edge.lineWidth = 1
             edge.stroke()
         }
-        if week != nil && five != nil {
-            pill(five, y: r.minY, h: 5)
-            pill(week, y: r.minY + 7, h: 7)
-        } else {
-            pill(week ?? five, y: r.minY, h: r.height)
+        var y = r.maxY - platePad - pillHeight
+        for p in pills {
+            let name = pillName(p.name), size = name.size()
+            name.draw(at: NSPoint(x: r.minX + platePad + names - size.width, y: y + round((pillHeight - size.height) / 2)))
+            pill(p.window, y: y, h: pillHeight)
+            y -= pillHeight + pillGap
         }
     }
 }
@@ -1761,12 +1879,6 @@ final class PetController: NSObject, NSMenuDelegate {
     /// Whether the power bar's pills have a light outline.
     var limitOutline: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMIT_OUTLINE"].map { $0 != "0" } ?? (d.object(forKey: "limitOutline") as? Bool ?? true) }
     /// Which windows the bubble row and the bar / label show: "both", "five" or "week".
-    var limitWindows: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_WINDOWS"] ?? d.string(forKey: "limitWindows") ?? "both" }
-    /// The windows to show; when the chosen one doesn't exist for this account, whatever does.
-    func shownLimits(_ week: LimitWindow?, _ five: LimitWindow?) -> (week: LimitWindow?, five: LimitWindow?) {
-        let w = limitWindows == "five" ? nil : week, f = limitWindows == "week" ? nil : five
-        return w == nil && f == nil ? (week, five) : (w, f)
-    }
     var limitStyle: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_STYLE"] ?? d.string(forKey: "limitStyle") ?? "both" }
     var limitPlace: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_PLACE"] ?? d.string(forKey: "limitPlace") ?? "auto" }
     var sessions: [(SessionState, String)] = []
@@ -2510,18 +2622,21 @@ final class PetController: NSObject, NSMenuDelegate {
 
         // The limits sit on the bubble's top row; when that row isn't showing, a small bar under the pet does.
         var barShown = false
-        if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), limitState != .off {
+        if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), limitState != .off, !limitAllHidden {
             barShown = true
             limitBar.style = limitStyle
             limitBar.outline = limitOutline
             limitBar.remaining = limitsLeft
             limitBar.week = nil
             limitBar.five = nil
-            if case let .data(allWeek, allFive) = limitState {
-                let (week, five) = shownLimits(allWeek, allFive)
-                limitBar.text = limitBarText(week: week, five: five)
-                limitBar.week = week
-                limitBar.five = five
+            if case .data = limitState {
+                limitBar.text = limitBarText()
+                // Two pills: the week, and the 5-hour window or on plans without one the scoped limit beside it.
+                let shown = fittedMeters()
+                limitBar.week = shown.first { $0.key == "week" }?.window
+                let second = limitSecondPill(shown)
+                limitBar.five = second?.window
+                limitBar.fiveName = second?.short ?? ""
             } else {
                 // Say so rather than show nothing: the limits only arrive when a Claude Code status line redraws.
                 limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอข้อมูล…" : "limit: ยังไม่มีข้อมูล",
@@ -2552,6 +2667,7 @@ final class PetController: NSObject, NSMenuDelegate {
         keepOnScreen()
         pet.frame = NSRect(x: (winWidth - petSize.width) / 2, y: petBase, width: petSize.width, height: petSize.height)
         limitBar.frame = NSRect(x: round((winWidth - barSize.width) / 2), y: 1, width: barSize.width, height: barSize.height)
+        limitBar.syncGlass()
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
         // Collapsed lists leave LINE and Discord out, so their counts go on the pet.
         lineBadge.count = (activityHidden || !expanded) && showLine ? lineUnread : 0
@@ -2574,7 +2690,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)" : "")
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
-        return "\(expanded)|\(limitState.signature)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
+        return "\(expanded)|\(limitState.signature)\(limitsLeft)\(limitPlace)\(shownMeters().map { $0.key + ($0.ahead ? "▲" : "") })\(limitStale)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -2752,10 +2868,11 @@ final class PetController: NSObject, NSMenuDelegate {
         let s = showLimits ? UsageLimits.read() : .off
         if s != limitState { limitState = s }
         // Crossing 90% gets one surprised face per reset cycle.
-        guard case let .data(week, five) = s, ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil else { return }
-        for (key, win) in [("week", week), ("five", five)] {
+        guard case let .data(week, five, scoped) = s, ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil else { return }
+        for (key, win) in [("week", week), ("five", five)] + scoped.map({ ($0.name, Optional($0.window)) }) {
             guard let win, win.used >= 90 else { continue }
-            let stamp = "\(Int(win.resetsAt?.timeIntervalSince1970 ?? 0))"
+            // To the minute, since the API's reset times are rounded and the status line's aren't.
+            let stamp = "\(Int(((win.resetsAt?.timeIntervalSince1970 ?? 0) / 60).rounded() * 60))"
             if d.string(forKey: "limitAlert-\(key)") != stamp {
                 d.set(stamp, forKey: "limitAlert-\(key)")
                 showEmote("omg", for: 4)
@@ -2763,41 +2880,97 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// "สัปดาห์ 62%  ·  5 ชม. 40%", or "สัปดาห์ 71%  ·  รีเซ็ต จ. 11:00" without a 5-hour window.
-    func limitText() -> NSAttributedString? {
-        guard showLimits, limitPlace != "bar", case let .data(allWeek, allFive) = limitState else { return nil }
-        let (week, five) = shownLimits(allWeek, allFive)
-        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: theme.secondary]
-        let out = NSMutableAttributedString()
-        func add(_ name: String, _ win: LimitWindow) {
-            if out.length > 0 { out.append(NSAttributedString(string: "  ·  ", attributes: label)) }
-            out.append(NSAttributedString(string: name + (limitsLeft ? " เหลือ " : " "), attributes: label))
-            let v = limitsLeft ? 100 - win.used : win.used
-            out.append(NSAttributedString(string: "\(Int(v.rounded()))%",
-                                          attributes: [.font: NSFont.boldSystemFont(ofSize: 12), .foregroundColor: limitColor(win.used)]))
-        }
-        if let w = week { add("สัปดาห์", w) }
-        if let f = five { add("5 ชม.", f) }
-        // One window shown: room for its reset time too.
-        if (week == nil) != (five == nil), let r = (week ?? five)?.resetsAt {
-            out.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r))", attributes: label))
-        }
-        return out.length > 0 ? out : nil
+    /// Every limit the account has, the 5-hour window first since it runs out soonest.
+    func limitMeters() -> [LimitMeter] {
+        guard case let .data(week, five, scoped) = limitState else { return [] }
+        let week7: TimeInterval = 7 * 86400
+        return (five.map { [LimitMeter(key: "five", short: "5hrs.", long: "5hrs.", span: 5 * 3600, window: $0)] } ?? [])
+            + scoped.map { LimitMeter(key: $0.key, short: $0.name, long: $0.long, span: $0.weekly ? week7 : nil, window: $0.window) }
+            + (week.map { [LimitMeter(key: "week", short: "weekly", long: "weekly", span: week7, window: $0)] } ?? [])
     }
 
-    /// The label under the pet: the 5-hour window first, since it runs out sooner.
-    func limitBarText(week: LimitWindow?, five: LimitWindow?) -> NSAttributedString {
-        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)]
+    /// Whether a limit shows on the pet: the user's choice, else the week and 5 hours, or on plans without
+    /// a 5-hour window (Ultra) the week and the busiest scoped limit.
+    func limitShown(_ m: LimitMeter) -> Bool {
+        // Debug: ANGELING_LIMIT_SHOW="week,Fable", or "auto" for the defaults whatever is saved.
+        let only = ProcessInfo.processInfo.environment["ANGELING_LIMIT_SHOW"]
+        if let only, only != "auto" { return only.split(separator: ",").contains(Substring(m.key)) }
+        if only == nil, let saved = d.object(forKey: "limitShow-\(m.key)") as? Bool { return saved }
+        let meters = limitMeters()
+        let hasFive = meters.contains { $0.key == "five" }
+        // 1.11's one setting, "five" or "week", until a switch is touched. A window the account lacks can't be the only one.
+        let old = ProcessInfo.processInfo.environment["ANGELING_LIMIT_WINDOWS"] ?? (only == nil ? d.string(forKey: "limitWindows") : nil)
+        if m.key == "week" { return old != "five" || !hasFive }
+        if m.key == "five" { return old != "week" || !meters.contains { $0.key == "week" } }
+        guard !hasFive else { return false }
+        return meters.filter { $0.key != "week" }.max { $0.window.used < $1.window.used }?.key == m.key
+    }
+
+    func shownMeters() -> [LimitMeter] { limitMeters().filter(limitShown) }
+    var limitAllHidden: Bool { !limitMeters().isEmpty && shownMeters().isEmpty }
+
+    var limitStale: Bool { UsageLimits.updated.map { -$0.timeIntervalSinceNow > UsageLimits.staleAfter } ?? false }
+
+    /// The limits on the pet, the same in the bubble and on the label: "5hrs. 92%▲ (18:20)  ·  weekly 62%", where ▲ means
+    /// going faster than time passes and the time is the reset once nearly full, or "weekly 71%  ·  รีเซ็ต จ. 11:00" alone.
+    func limitRow(_ meters: [LimitMeter], font: CGFloat, labelFont: CGFloat, labelColour: NSColor, colour: (Double) -> NSColor) -> NSAttributedString {
+        let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: labelFont), .foregroundColor: labelColour]
         let out = NSMutableAttributedString()
-        for (name, win) in [("5 ชม.", five), ("สัปดาห์", week)] {
-            guard let win else { continue }
+        for m in meters {
             if out.length > 0 { out.append(NSAttributedString(string: "  ·  ", attributes: label)) }
-            out.append(NSAttributedString(string: name + (limitsLeft ? " เหลือ " : " "), attributes: label))
-            let v = limitsLeft ? 100 - win.used : win.used
-            out.append(NSAttributedString(string: "\(Int(v.rounded()))%",
-                                          attributes: [.font: NSFont.boldSystemFont(ofSize: 10), .foregroundColor: limitBarColor(win.used)]))
+            out.append(NSAttributedString(string: m.short + (limitsLeft ? " left " : " "), attributes: label))
+            let v = limitsLeft ? 100 - m.window.used : m.window.used
+            out.append(NSAttributedString(string: "\(Int(v.rounded()))%" + (m.ahead ? "▲" : ""),
+                                          attributes: [.font: NSFont.boldSystemFont(ofSize: font), .foregroundColor: colour(m.window.used).withAlphaComponent(limitStale ? 0.5 : 1)]))
+            if meters.count > 1, m.window.used > 85, let r = m.window.resetsAt {
+                out.append(NSAttributedString(string: " (\(limitResetText(r)))", attributes: label))
+            }
+        }
+        if meters.count == 1, let r = meters[0].window.resetsAt {
+            out.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r))", attributes: label))
         }
         return out
+    }
+
+    func limitBarRow(_ meters: [LimitMeter]) -> NSAttributedString {
+        limitRow(meters, font: 9, labelFont: 9, labelColour: limitBar.usesGlass ? theme.secondary : NSColor(white: 1, alpha: 0.8),
+                 colour: limitBar.usesGlass ? limitColor : limitBarColor)
+    }
+
+    /// The pill beside the week: the 5-hour window, else the fullest scoped limit, so a nearly full one is never left out.
+    func limitSecondPill(_ meters: [LimitMeter]) -> LimitMeter? {
+        meters.first { $0.key == "five" } ?? meters.filter { $0.key != "week" }.max { $0.window.used < $1.window.used }
+    }
+
+    func limitBubbleRow(_ meters: [LimitMeter]) -> NSAttributedString {
+        limitRow(meters, font: 12, labelFont: 11, labelColour: theme.secondary, colour: limitColor)
+    }
+
+    /// What the bubble and label show. Neither can outgrow the window or reach the bubble's chevron, so scoped limits give
+    /// way, least used first; the tooltip still has them.
+    func fittedMeters() -> [LimitMeter] {
+        var meters = shownMeters()
+        while meters.count > 1, limitBarRow(meters).size().width + 12 > winWidth || limitBubbleRow(meters).size().width > winWidth - bubble.pad * 2 - 32,
+              let drop = meters.filter({ $0.key != "week" && $0.key != "five" }).min(by: { $0.window.used < $1.window.used }) {
+            meters.removeAll { $0.key == drop.key }
+        }
+        return meters
+    }
+
+    func limitText() -> NSAttributedString? {
+        guard showLimits, limitPlace != "bar" else { return nil }
+        let t = limitBubbleRow(fittedMeters())
+        return t.length > 0 ? t : nil
+    }
+
+    func limitBarText() -> NSAttributedString { limitBarRow(fittedMeters()) }
+
+    /// "อัปเดต 3 นาทีก่อน", the age of the numbers on show.
+    func limitAgeLine() -> String? {
+        guard let u = UsageLimits.updated else { return nil }
+        let m = Int(-u.timeIntervalSinceNow / 60)
+        let ago = m < 1 ? "อัปเดตเมื่อสักครู่" : m < 60 ? "อัปเดต \(m) นาทีก่อน" : m < 1440 ? "อัปเดต \(m / 60) ชม. ก่อน" : "อัปเดต \(m / 1440) วันก่อน"
+        return limitStale ? ago + " (ตัวเลขอาจไม่ล่าสุด ลองใช้ Claude Code สักครั้ง)" : ago
     }
 
     /// One line per window, with the reset time and how long until it.
@@ -2806,15 +2979,15 @@ final class PetController: NSObject, NSMenuDelegate {
         case .off: return []
         case .waiting: return ["รอข้อมูลจาก Claude…"]
         case .noData: return ["ยังไม่มีข้อมูล limit: ส่งข้อความใน Claude Code สักครั้ง (บัญชี API key ไม่มีข้อมูลนี้)"]
-        case let .data(week, five):
-            return [("สัปดาห์นี้", week), ("5 ชม.", five)].compactMap { name, win in
-                guard let win else { return nil }
-                let v = Int((limitsLeft ? 100 - win.used : win.used).rounded())
-                var s = "\(name) \(limitsLeft ? "เหลือ" : "ใช้ไป") \(v)%"
-                if let r = win.resetsAt { s += " · รีเซ็ต \(limitResetText(r)) (\(limitCountdown(r)))" }
-                return s
-            }
+        case .data: return limitMeters().map(limitLine) + (limitAgeLine().map { [$0] } ?? [])
         }
+    }
+
+    func limitLine(_ m: LimitMeter) -> String {
+        let v = Int((limitsLeft ? 100 - m.window.used : m.window.used).rounded())
+        var s = "\(m.long) \(limitsLeft ? "เหลือ" : "ใช้ไป") \(v)%"
+        if let r = m.window.resetsAt { s += " · รีเซ็ต \(limitResetText(r)) (\(limitCountdown(r)))" }
+        return m.ahead ? s + " · ▲ ใช้เร็วกว่าเวลาที่ผ่านไป" : s
     }
 
     func limitTooltip() -> String { limitMenuLines().joined(separator: "\n") }
@@ -2850,11 +3023,6 @@ final class PetController: NSObject, NSMenuDelegate {
         d.set(on, forKey: "showLimits")
         pollLimits()
         fetchLimits()
-        refresh()
-    }
-
-    func setLimitWindows(_ id: String) {
-        d.set(id, forKey: "limitWindows")
         refresh()
     }
 
@@ -2915,7 +3083,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: return 360
         case .look: return 560
         case .alerts: return 280
-        case .limits: return 450
+        case .limits: return 540
         case .updates: return 250
         }
     }
@@ -3014,10 +3182,16 @@ struct SettingsPane: View {
             Section {
                 Toggle("แสดง limit การใช้งาน Claude", isOn: m.bind({ c.showLimits }, { if $0 != c.showLimits { c.toggleLimits() } }))
                 if c.showLimits {
-                    ForEach(c.limitMenuLines(), id: \.self) { Text($0).foregroundStyle(.secondary) }
+                    if c.limitMeters().isEmpty {
+                        ForEach(c.limitMenuLines(), id: \.self) { Text($0).foregroundStyle(.secondary) }
+                    }
+                    ForEach(c.limitMeters(), id: \.key) { x in
+                        Toggle(c.limitLine(x), isOn: m.bind({ c.limitShown(x) }, { c.d.set($0, forKey: "limitShow-\(x.key)"); c.refresh() }))
+                    }
+                    if let age = c.limitAgeLine() { Text(age).foregroundStyle(.secondary) }
                 }
             } footer: {
-                Text("อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code) และจาก status line ของ Claude Code").font(.caption).foregroundStyle(.secondary)
+                Text("เปิดสวิตช์ของตัวเลขที่อยากให้แสดงที่ Angeling อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code) และจาก status line ของ Claude Code").font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Picker("แสดงเป็น", selection: m.bind({ c.limitsLeft ? "left" : "used" }, { c.setLimitMode($0) })) {
@@ -3033,11 +3207,6 @@ struct SettingsPane: View {
                     Text("หลอดพลังและตัวเลข").tag("both")
                     Text("หลอดพลังอย่างเดียว").tag("bar")
                     Text("ตัวเลขอย่างเดียว").tag("text")
-                }
-                Picker("limit ที่แสดง", selection: m.bind({ c.limitWindows }, { c.setLimitWindows($0) })) {
-                    Text("5 ชม. และสัปดาห์").tag("both")
-                    Text("5 ชม. อย่างเดียว").tag("five")
-                    Text("สัปดาห์อย่างเดียว").tag("week")
                 }
                 Toggle("ขอบหลอดพลัง", isOn: m.bind({ c.limitOutline }, { c.setLimitOutline($0) }))
                     .disabled(c.limitStyle == "text")
@@ -3225,6 +3394,7 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     if let t = env["ANGELING_SETTINGS"] { controller.settings.show(SettingsTab(rawValue: t) ?? .general) }
     if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        if env["ANGELING_PRINT_LIMITS"] != nil { print((["bar: " + controller.limitBarText().string, "bubble: " + (controller.limitText()?.string ?? ""), "pill: " + controller.limitBar.fiveName] + controller.limitMenuLines()).joined(separator: "\n")) }
         let windowed = env["ANGELING_FORM"] != nil || env["ANGELING_SETTINGS"] != nil
         let v = env["ANGELING_SETTINGS"] != nil ? controller.settings.window.contentView!
               : env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!

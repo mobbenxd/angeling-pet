@@ -27,6 +27,14 @@ pkill -x Angeling; open ~/Applications/Angeling.app
 cp hooks/angeling-hook.sh ~/.claude/angeling-pet/hook.sh
 ```
 
+## ทดสอบ limit
+
+```bash
+./scripts/check-limits.sh build/Angeling.app
+```
+
+ใช้ HOME ชั่วคราว ไม่แตะข้อมูลจริงและไม่เรียก API
+
 ## ทดสอบหน้าตาโดยไม่ต้องจับภาพจอ
 
 ```bash
@@ -36,11 +44,13 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | ตัวแปร | ผล |
 |---|---|
 | `ANGELING_EXPANDED=1` | แบบขยาย (ไม่ใส่ = แบบย่อ ไม่ว่าจะเลือกอะไรไว้) |
-| `ANGELING_LIMITS=62,40` | จำลอง limit สัปดาห์,5 ชม. (`71` = มีแค่สัปดาห์, `none` = ยังไม่มีตัวเลข limit, `wait` = ยังไม่มีข้อมูล) และเปิดการแสดง limit |
+| `ANGELING_LIMITS=62,40` | จำลอง limit สัปดาห์,5 ชม. (`71` = มีแค่สัปดาห์, `62,,30` = สัปดาห์กับ Fable ไม่มี 5 ชม., `@reply.json` = อ่านคำตอบของ usage API จากไฟล์, `files` = อ่านไฟล์ที่บันทึกไว้โดยไม่เรียก API, `none` = ยังไม่มีตัวเลข limit, `wait` = ยังไม่มีข้อมูล) และเปิดการแสดง limit |
+| `ANGELING_LIMIT_SHOW=week,Fable` | เลือก limit ที่แสดง (`week`, `five` หรือชื่อรุ่น, `auto` = ค่าเริ่มต้นโดยไม่อ่านค่าที่บันทึกไว้) |
+| `ANGELING_PRINT_LIMITS=1` | พิมพ์ข้อความป้ายและรายการ limit ออก stdout ตอนจับภาพ |
 | `ANGELING_LIMIT_MODE=left` | แสดง limit เป็น % ที่เหลือ |
 | `ANGELING_LIMIT_PLACE=both` | ที่แสดง limit (`auto`, `both`, `bar`) |
 | `ANGELING_LIMIT_STYLE=bar` | ใต้ Angeling แสดงอะไร (`both` = หลอดพลังและตัวเลข, `bar`, `text`) |
-| `ANGELING_LIMIT_WINDOWS=five` | limit ที่แสดง (`both`, `five`, `week`) |
+| `ANGELING_LIMIT_WINDOWS=five` | จำลองค่า "limit ที่แสดง" เดิมจาก 1.11 (`both`, `five`, `week`) ใช้คู่กับ `ANGELING_LIMIT_SHOW=auto` |
 | `ANGELING_LIMIT_OUTLINE=0` | ปิดขอบหลอดพลัง (`1` = เปิด) |
 | `ANGELING_HIDE_ACTIVITY=1` | ซ่อนบับเบิล (เห็นป้ายตัวเลข) |
 | `ANGELING_HOVER=1` | แสดงปุ่มซ่อนหรือแสดง |

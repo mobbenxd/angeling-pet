@@ -4,7 +4,7 @@
 - **ช่วยตั้งเตือน:** บันทึกลงปฏิทิน และเตือนด้วยเสียง Level Up ของ Ragnarok เมื่อถึงเวลา
 - **บอกจำนวนข้อความ LINE** ที่ยังไม่อ่าน
 - **บอกจำนวนข้อความ Discord** ที่ยังไม่อ่าน (DM และ @mention)
-- **บอก limit การใช้งาน Claude** รายสัปดาห์และ 5 ชั่วโมง (เปิดใน ตั้งค่า…)
+- **บอก limit การใช้งาน Claude** ตามที่บัญชีนั้นมี เช่น 5 ชั่วโมง รายสัปดาห์ และแยกรุ่น (เปิดใน ตั้งค่า…)
 - **รายงานงานของ Claude Code** ว่าแต่ละ session กำลังทำอะไร อันไหนรอคุณ อันไหนเสร็จแล้ว คลิกเพื่อไปที่ session นั้นได้ (ไม่มี Claude Code ก็ใช้ฟีเจอร์อื่นได้)
 
 ติดตั้งด้วยคำสั่งเดียว (วางใน Terminal):
@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh |
 | [ตั้งเตือน](Reminders.md) | อยากให้ Angeling เตือนนัดหรืองาน พร้อมบันทึกลงปฏิทิน |
 | [แจ้งเตือน Discord](Discord-Notifications.md) | อยากรู้ว่ามี DM ใน Discord ที่ยังไม่อ่านกี่ข้อความ |
 | [แจ้งเตือน LINE](LINE-Notifications.md) | อยากให้แสดงข้อความ LINE ที่ยังไม่อ่าน |
-| [Limit การใช้งาน Claude](Usage-Limits.md) | อยากรู้ว่าใช้ limit สัปดาห์และ 5 ชั่วโมงไปเท่าไร |
+| [Limit การใช้งาน Claude](Usage-Limits.md) | อยากรู้ว่าใช้ limit 5 ชั่วโมง รายสัปดาห์ หรือแยกรุ่นไปเท่าไร |
 | [Emote และท่าทาง](Emotes-and-Animations.md) | อยากรู้ว่า Angeling ทำท่าไหนเมื่อไร |
 | [เปลี่ยนเป็นเพ็ตตัวอื่น](Custom-Pet.md) | อยากใช้ sprite ของเพ็ต Codex ตัวอื่น |
 
