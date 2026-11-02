@@ -1173,19 +1173,58 @@ enum UsageLimits {
     }
 }
 
-/// The limits under the pet while the bubble doesn't show them: a small dark label with both
-/// windows' numbers, "5 ชม. 60%  ·  สัปดาห์ 38%", sized to its text.
+/// The limits under the pet while the bubble doesn't show them. Under the pet a power bar, the week on top
+/// (5 px) and the 5-hour window under it (4 px), or the week alone at full height; under the bar a small dark
+/// label with both numbers, "5 ชม. 60%  ·  สัปดาห์ 38%". `style` picks "bar", "text" or "both".
 final class LimitBar: NSView {
     var text = NSAttributedString()
+    var week: LimitWindow?
+    var five: LimitWindow?
+    var remaining = false
+    var style = "both"
+    static let barSize = NSSize(width: 56, height: 9)
+    /// No numbers yet (waiting / no data): only the label, which says so.
+    var hasBar: Bool { style != "text" && (week != nil || five != nil) }
+    var hasText: Bool { style != "bar" || !hasBar }
+    var textSize: NSSize { NSSize(width: ceil(text.size().width) + 12, height: 16) }
     var size: NSSize {
-        let t = text.size()
-        return NSSize(width: ceil(t.width) + 12, height: 16)
+        let t = hasText ? textSize : .zero
+        let b = hasBar ? Self.barSize : .zero
+        return NSSize(width: max(t.width, b.width), height: t.height + b.height + (hasBar && hasText ? 3 : 0))
     }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0, alpha: 0.55).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
-        let t = text.size()
-        text.draw(at: NSPoint(x: round((bounds.width - t.width) / 2), y: round((bounds.height - t.height) / 2)))
+        let sz = size
+        if hasBar {
+            let b = Self.barSize
+            drawBar(NSRect(x: round((sz.width - b.width) / 2), y: sz.height - b.height, width: b.width, height: b.height))
+        }
+        if hasText {
+            let t = textSize
+            let r = NSRect(x: round((sz.width - t.width) / 2), y: 0, width: t.width, height: t.height)
+            NSColor(white: 0, alpha: 0.55).setFill()
+            NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill()
+            let ts = text.size()
+            text.draw(at: NSPoint(x: r.minX + round((r.width - ts.width) / 2), y: round((r.height - ts.height) / 2)))
+        }
+    }
+    private func drawBar(_ r: NSRect) {
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        let clip = NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3)
+        NSColor(white: 0.1, alpha: 0.85).setFill()
+        clip.fill()
+        clip.addClip()
+        func fill(_ w: LimitWindow?, y: CGFloat, h: CGFloat) {
+            guard let w else { return }
+            let share = remaining ? 100 - w.used : w.used
+            limitBarColor(w.used).setFill()
+            NSRect(x: r.minX, y: y, width: round(r.width * CGFloat(share / 100)), height: h).fill()
+        }
+        switch (week, five) {
+        case (.some, .some): fill(five, y: r.minY, h: 4); fill(week, y: r.minY + 4, h: r.height - 4)
+        case (.some, nil): fill(week, y: r.minY, h: r.height)
+        default: fill(five, y: r.minY, h: r.height)
+        }
     }
 }
 
@@ -1705,6 +1744,8 @@ final class PetController: NSObject, NSMenuDelegate {
     var showLimits: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMITS"] != nil || d.bool(forKey: "showLimits") }
     var limitsLeft: Bool { (ProcessInfo.processInfo.environment["ANGELING_LIMIT_MODE"] ?? d.string(forKey: "limitMode")) == "left" }
     /// Where the limits show: "auto" (the bubble's top row, or the bar while that row isn't showing), "both", or "bar".
+    /// What sits under the pet: "both" (power bar and numbers), "bar", or "text".
+    var limitStyle: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_STYLE"] ?? d.string(forKey: "limitStyle") ?? "both" }
     var limitPlace: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_PLACE"] ?? d.string(forKey: "limitPlace") ?? "auto" }
     var sessions: [(SessionState, String)] = []
     var dismissed: [String: Double] = [:]  // session -> updated stamp at dismissal
@@ -2449,8 +2490,14 @@ final class PetController: NSObject, NSMenuDelegate {
         var barShown = false
         if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), limitState != .off {
             barShown = true
+            limitBar.style = limitStyle
+            limitBar.remaining = limitsLeft
+            limitBar.week = nil
+            limitBar.five = nil
             if case let .data(week, five) = limitState {
                 limitBar.text = limitBarText(week: week, five: five)
+                limitBar.week = week
+                limitBar.five = five
             } else {
                 // Say so rather than show nothing: the limits only arrive when a Claude Code status line redraws.
                 limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอข้อมูล…" : "limit: ยังไม่มีข้อมูล",
@@ -2460,7 +2507,8 @@ final class PetController: NSObject, NSMenuDelegate {
             limitBar.needsDisplay = true
         }
         limitBar.isHidden = !barShown
-        let petBase: CGFloat = barShown ? 18 : 0
+        let barSize = limitBar.size
+        let petBase: CGFloat = barShown ? barSize.height + 2 : 0
 
         // Emote floats above the head (like in RO); the bubble moves up to make room for it.
         var emoteRect = NSRect.zero
@@ -2479,7 +2527,6 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         keepOnScreen()
         pet.frame = NSRect(x: (winWidth - petSize.width) / 2, y: petBase, width: petSize.width, height: petSize.height)
-        let barSize = limitBar.size
         limitBar.frame = NSRect(x: round((winWidth - barSize.width) / 2), y: 1, width: barSize.width, height: barSize.height)
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
         // Collapsed lists leave LINE and Discord out, so their counts go on the pet.
@@ -2779,6 +2826,11 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
 
+    func setLimitStyle(_ id: String) {
+        d.set(id, forKey: "limitStyle")
+        refresh()
+    }
+
     func setLimitPlace(_ id: String) {
         d.set(id, forKey: "limitPlace")
         refresh()
@@ -2826,7 +2878,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: return 360
         case .look: return 560
         case .alerts: return 280
-        case .limits: return 300
+        case .limits: return 360
         case .updates: return 250
         }
     }
@@ -2936,9 +2988,14 @@ struct SettingsPane: View {
                     Text("เหลืออยู่").tag("left")
                 }
                 Picker("แสดงที่", selection: m.bind({ c.limitPlace }, { c.setLimitPlace($0) })) {
-                    Text("บนบับเบิล (ป้ายเมื่อซ่อนบับเบิล)").tag("auto")
-                    Text("บนบับเบิลและป้าย").tag("both")
-                    Text("ป้ายใต้ Angeling อย่างเดียว").tag("bar")
+                    Text("บนบับเบิล (ใต้ Angeling เมื่อซ่อนบับเบิล)").tag("auto")
+                    Text("บนบับเบิลและใต้ Angeling").tag("both")
+                    Text("ใต้ Angeling อย่างเดียว").tag("bar")
+                }
+                Picker("ใต้ Angeling", selection: m.bind({ c.limitStyle }, { c.setLimitStyle($0) })) {
+                    Text("หลอดพลังและตัวเลข").tag("both")
+                    Text("หลอดพลังอย่างเดียว").tag("bar")
+                    Text("ตัวเลขอย่างเดียว").tag("text")
                 }
             }
             .disabled(!c.showLimits)
