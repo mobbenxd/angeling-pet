@@ -4,8 +4,9 @@
 //
 // Generated sheets are often the wrong size and their rows are unevenly spaced, so this finds
 // the frames instead of trusting a grid: each row is a horizontal band of non-transparent
-// pixels, each frame a run of columns inside it (runs a few pixels apart are one frame). Frames
-// keep their place within the source's 8 columns and stand on their row's lowest point, then
+// pixels, each frame a run of columns inside it (runs a few pixels apart are one frame). A run
+// much wider than a frame is touching frames and is cut apart, and a row up to two frames short
+// repeats its last frame. Frames keep their place within the source's 8 columns and stand on their row's lowest point, then
 // everything is redrawn at one scale onto the exact 1536x2288 grid of 192x208 cells.
 // Like the rest of the artwork the result is not committed; it ships as the pets.zip release asset.
 import AppKit
@@ -47,14 +48,27 @@ guard bands.count == rows else {
     exit(1)
 }
 let slotW = Double(w) / Double(cols)
+var found = bands.map { band in runs(w, join: 4) { x in band.contains { solid(x, $0) } } }
+let typical = found.joined().map(\.count).sorted()[found.joined().count / 2]
 var frames: [[Range<Int>]] = []
 for (r, band) in bands.enumerated() {
-    let f = runs(w, join: 4) { x in band.contains { solid(x, $0) } }
-    guard f.count == frameCounts[r] else {
+    var f = found[r]
+    // Frames drawn touching come out as one run far wider than a frame: cut at the thinnest column.
+    while f.count < frameCounts[r], let i = f.indices.max(by: { f[$0].count < f[$1].count }), f[i].count > typical * 3 / 2 {
+        let xs = f[i], mid = xs.lowerBound + xs.count / 4..<xs.upperBound - xs.count / 4
+        let cut = mid.min { a, b in band.filter { solid(a, $0) }.count < band.filter { solid(b, $0) }.count }!
+        f[i...i] = [xs.lowerBound..<cut, cut + 1..<xs.upperBound]
+    }
+    guard (frameCounts[r] - 2...frameCounts[r]).contains(f.count) else {
         FileHandle.standardError.write("Row \(r): found \(f.count) frames, expected \(frameCounts[r])\n".data(using: .utf8)!)
         exit(1)
     }
-    frames.append(f)
+    // A row a frame or two short holds its last pose.
+    if f.count < frameCounts[r] {
+        print("Row \(r): found \(f.count) frames, repeating the last to make \(frameCounts[r])")
+    }
+    found[r] = f
+    frames.append(f + Array(repeating: f.last!, count: frameCounts[r] - f.count))
 }
 
 // One scale for the whole sheet: fill the 8 columns, but never let a frame leave its cell.
@@ -70,7 +84,8 @@ for (r, band) in bands.enumerated() {
         let crop = cg.cropping(to: CGRect(x: xs.lowerBound, y: band.lowerBound, width: xs.count, height: band.count))!
         let dw = Double(xs.count) * scale, dh = Double(band.count) * scale
         // Offset from the source column's centre, kept so effects beside the pet don't shift it.
-        let dx = (Double(xs.lowerBound + xs.upperBound) / 2 - (Double(c) + 0.5) * slotW) * scale
+        let src = min(c, found[r].count - 1)   // a repeated frame keeps its source column's offset
+        let dx = (Double(xs.lowerBound + xs.upperBound) / 2 - (Double(src) + 0.5) * slotW) * scale
         let x = Double(c * cellW) + Double(cellW) / 2 + dx - dw / 2
         let y = Double(outH - (r + 1) * cellH + baseline)   // CGContext counts from the bottom
         ctx.draw(crop, in: CGRect(x: x, y: y, width: dw, height: dh))

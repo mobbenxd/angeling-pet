@@ -92,6 +92,10 @@ python3 -I scripts/import-characters.py ~/Downloads/bomber-all-18-characters.zip
 swift scripts/import-pet.swift ~/Downloads/huskey.png bee-husky "Bee Husky"
 ```
 
+```bash
+swift scripts/import-pet.swift ~/Downloads/banana-dog.webp banana-dog "Banana Dog" "A pixel-art yellow dog with a banana body."
+```
+
 ทุก Release ต้องแนบไฟล์ครบทุกตัว เพราะ `get.sh` และ `fetch-assets.sh` ดึงจาก `releases/latest`
 
 ทดสอบตัวติดตั้งกับไฟล์ในเครื่อง โดยไม่ยุ่งกับการติดตั้งจริง:

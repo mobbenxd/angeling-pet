@@ -5,7 +5,7 @@
 #   assets/emotes/*.gif       Ragnarok Online emotes (/lv /heh /swt /wah /omg /slur)
 #   assets/sounds/levelup.mp3 Ragnarok Online level-up sound (reminder chime)
 #   assets/characters/        Bomber characters to pick from (scripts/import-characters.py)
-#   assets/pets/<id>/         extra Codex v2 pets to pick from, e.g. Bee Husky (scripts/import-pet.swift)
+#   assets/pets/<id>/         extra Codex v2 pets to pick from, e.g. Bee Husky, Banana Dog (scripts/import-pet.swift)
 # Sources, first that works: a local Codex pet (sprite sheet only), the latest GitHub Release,
 # then the original sites (irowiki.org, myinstants.com).
 set -euo pipefail
