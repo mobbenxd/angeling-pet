@@ -36,7 +36,7 @@ launchctl print gui/$(id -u)/local.angeling.pet | head -3
 1. เช็คว่ามี hook ครบ: `grep -c angeling-pet/hook.sh ~/.claude/settings.json` ต้องได้ `11`
 2. เช็คว่า hook เขียนไฟล์ได้: สั่งงาน Claude แล้วดู `ls -lt ~/.claude/angeling-pet/state/` ต้องมีไฟล์ที่เพิ่งอัปเดต
 3. เช็คว่ามี `jq`: `jq --version` (hook หาที่ `/opt/homebrew/bin/jq` ก่อน แล้วค่อยหาใน PATH)
-4. บับเบิลถูกซ่อนอยู่หรือเปล่า: ชี้ที่ Angeling แล้วกดปุ่มทางซ้าย หรือเมนู → "แสดงกิจกรรม"
+4. บับเบิลถูกซ่อนอยู่หรือเปล่า: ชี้ที่ Angeling แล้วกดปุ่มทางซ้าย หรือปิด **ซ่อนกิจกรรม** ที่ ตั้งค่า… → ทั่วไป
 
 ## งานค้างเป็น "กำลังทำ" ทั้งที่เสร็จแล้ว
 

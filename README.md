@@ -23,7 +23,7 @@ You need macOS 13 or later. No Xcode, git or Homebrew is needed.
 3. Wait about 10 seconds for `Done!`. Angeling appears in the bottom-right corner and will start at every login.
 4. Press **⌥⌘R** to set your first reminder. Click **Allow Full Access** when macOS asks about Calendar.
 
-If you use Claude Code, it's picked up automatically. **⌥⌘A** shows or hides Angeling, and right-clicking it opens the menu.
+If you use Claude Code, it's picked up automatically. **⌥⌘A** shows or hides Angeling, and right-clicking it opens the menu; ตั้งค่า… (⌘,) opens the settings window.
 
 ### ติดตั้ง (ภาษาไทย)
 
@@ -54,7 +54,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Activity bubble**: one row per session, showing its status (กำลังทำ / ต้องดูตอนนี้ / ติดปัญหา / เสร็จแล้ว), what it is doing right now, the prompt, and the task-list progress.
 - **Finished tasks**: shown in green until you open or dismiss them, or for 30 minutes.
 - **Collapse and expand**: the ⌄ / ⌃ chevron on the bubble's top row switches between the two rows that matter most (with what each session is doing now; the rest counted in a "+N อื่น ๆ" line that turns orange when it hides a session waiting on you) and every session in full. Angeling remembers the choice. While collapsed, LINE and Discord counts move to badges on Angeling.
-- **Claude usage limits** (off by default, menu 📊): the bubble's top row shows the weekly and 5-hour limits, e.g. `สัปดาห์ 62% · 5 ชม. 40%`, coloured blue, orange from 60% and red above 85%. Without a 5-hour window it shows the weekly reset day instead. When the bubble is hidden, a small two-layer bar under Angeling shows both; the menu can also show the bar all the time, or only the bar. Shows used or remaining. Angeling makes the `/omg` face once per cycle at 90%. Claude Code only gives these numbers to the status line, so turning this on wraps your status line (yours still runs) and turning it off puts it back. See [Claude usage limits](docs/Usage-Limits.md).
+- **Claude usage limits** (off by default, ตั้งค่า… → Claude limit): the bubble's top row shows the weekly and 5-hour limits, e.g. `สัปดาห์ 62% · 5 ชม. 40%`, coloured blue, orange from 60% and red above 85%. Without a 5-hour window it shows the weekly reset day instead. When the bubble is hidden, a small two-layer bar under Angeling shows both; the menu can also show the bar all the time, or only the bar. Shows used or remaining. Angeling makes the `/omg` face once per cycle at 90%. Claude Code only gives these numbers to the status line, so turning this on wraps your status line (yours still runs) and turning it off puts it back. See [Claude usage limits](docs/Usage-Limits.md).
 - **Click to jump**:
   - Click a row to open that session.
   - Click Angeling to open the latest active session.
@@ -63,11 +63,11 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
   - Hover Angeling to reveal a button that hides or shows the bubble. A red badge shows the number of active sessions while it is hidden.
   - Hide Angeling itself with ⌥⌘A or from the menu bar icon.
   - Pops back out when a session needs you (can be turned off).
-- **Themes**: Classic (the pink bubble), Minimal light, Minimal dark, Liquid Glass (macOS 26+), Tokyo Night, Ragnarok (a Ragnarok Online window: blue title bar, grey frame, white list, flat rows), or follow macOS light / dark. Pick one from the ธีม menu.
-- **Characters**: swap Angeling for Bee Husky (a chibi husky puppy) or one of 18 Bomber characters (Thunder, Bomber Cat, Chick Squad, Tommy Shelby and more) from the ตัวละคร menu. Each one walks, waves and blinks when hurt in place of Angeling's animations. See [Use a different pet](docs/Custom-Pet.md).
+- **Themes**: Classic (the pink bubble), Minimal light, Minimal dark, Liquid Glass (macOS 26+), Tokyo Night, Ragnarok (a Ragnarok Online window: blue title bar, grey frame, white list, flat rows), or follow macOS light / dark. Pick one in ตั้งค่า… → หน้าตา.
+- **Characters**: swap Angeling for Bee Husky (a chibi husky puppy) or one of 18 Bomber characters (Thunder, Bomber Cat, Chick Squad, Tommy Shelby and more) from ตั้งค่า… → หน้าตา. Each one walks, waves and blinks when hurt in place of Angeling's animations. See [Use a different pet](docs/Custom-Pet.md).
 - **Ragnarok cursor**: hovering Angeling turns the pointer into the Ragnarok Online cursor, a blue and white arrowhead that spins like the one in the game. In the Ragnarok theme the bubble's rows and button use it too. The cursor is drawn by the app, so it needs no extra artwork.
 - **Needs you now**: when Claude asks for permission or asks you something, the row turns red with a slow pulse and moves to the top. Angeling gets a red "!" badge and plays a short sound (can be muted).
-- **Choose what the bubble shows**: right-click a row, Angeling, or the menu bar icon to turn the prompt, the latest message and the task list on or off.
+- **Choose what the bubble shows**: right-click a row, or open ตั้งค่า… → ทั่วไป, to turn the prompt, the latest message and the task list on or off.
 - **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
 - **Discord**: a purple Discord row shows how many DMs and @mentions are unread. The number is Discord's own Dock badge count, so no permission is needed and no message is read. Click it to open Discord. See [Discord notifications](docs/Discord-Notifications.md).
 - **Update notices**: when a new release is out, a 🎁 row shows the new version. Click it to update in place. Right-click it to see what's new or skip that version.
@@ -143,7 +143,7 @@ Claude Code hooks ──► hooks/angeling-hook.sh ──► ~/.claude/angeling-
 - **Discord** is polled every 3 s: only its Dock badge, through `lsappinfo`.
 - **LINE** is polled every 3 s: only its Dock badge, through `lsappinfo`.
 - **Usage limits** (when turned on): `statusLine` in `~/.claude/settings.json` runs `~/.claude/angeling-pet/statusline.sh`, which saves Claude Code's status JSON to `limits.json` and then runs your own status line. The app reads `rate_limits` from it every 3 s.
-- **The app** is a single-file AppKit program. Its only network call is the update check against the GitHub releases API, which can be turned off in the menu (อัปเดต → ตรวจอัตโนมัติ). It has no dependencies and runs as an accessory app, so it has no Dock icon.
+- **The app** is a single-file AppKit program. Its only network call is the update check against the GitHub releases API, which can be turned off in the settings (ตั้งค่า… → อัปเดต → ตรวจอัตโนมัติ). It has no dependencies and runs as an accessory app, so it has no Dock icon.
 
 ## Artwork
 
