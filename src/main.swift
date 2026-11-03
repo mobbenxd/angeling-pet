@@ -2325,7 +2325,8 @@ final class PetController: NSObject, NSMenuDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: w) // time to move onto the toggle
     }
 
-    @objc func toggleActivity() { activityHidden.toggle(); expanded = false; d.set(false, forKey: "expanded"); refresh() }
+    // The eye button is the bubble's only show / hide control, so showing it again brings back the full list.
+    @objc func toggleActivity() { activityHidden.toggle(); expanded = !activityHidden; d.set(expanded, forKey: "expanded"); refresh() }
     @objc func togglePet() {
         petHidden.toggle()
         if petHidden { panel.orderOut(nil) } else { panel.orderFrontRegardless(); setOverride("waving", for: 1.2) }
@@ -2680,12 +2681,11 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
-        // The top row: the limits (when shown) and the collapse / expand chevron.
-        func withHeader(_ rows: [RowView], toggles: Bool) -> [RowView] {
-            let limit = limitText()
-            limitInBubble = limit != nil
-            guard limit != nil || toggles else { return rows }
-            return [headerRow(limit, toggles: toggles, width: w)] + rows
+        // The top row: the limits, when shown.
+        func withHeader(_ rows: [RowView]) -> [RowView] {
+            guard let limit = limitText() else { return rows }
+            limitInBubble = true
+            return [headerRow(limit, width: w)] + rows
         }
 
         limitInBubble = false
@@ -2698,7 +2698,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 + reminderRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
                 + live.filter { $0.1 != "waiting" }.map { sessionRow($0.0, $0.1, detailed: true) }
             if rows.isEmpty { rows = [RowView(text: NSAttributedString(string: "ยังไม่มีงานที่กำลังทำ~", attributes: normal), width: w, clickable: false)] }
-            return withHeader(rows, toggles: true)
+            return withHeader(rows)
         }
 
         // Collapsed: the two rows that matter most (title and latest message), the rest counted in one line.
@@ -2723,7 +2723,7 @@ final class PetController: NSObject, NSMenuDelegate {
             more.onClick = { [weak self] in self?.toggleExpand() }
             rows.append(more)
         }
-        return withHeader(rows, toggles: !hidden.isEmpty)
+        return withHeader(rows)
     }
 
     // MARK: usage limits
@@ -2819,19 +2819,9 @@ final class PetController: NSObject, NSMenuDelegate {
 
     func limitTooltip() -> String { limitMenuLines().joined(separator: "\n") }
 
-    func headerRow(_ limit: NSAttributedString?, toggles: Bool, width w: CGFloat) -> RowView {
-        let t = NSMutableAttributedString(attributedString: limit ?? NSAttributedString(string: " ", attributes: [.font: NSFont.systemFont(ofSize: 8)]))
-        let r = RowView(text: t, width: w, clickable: toggles)
-        if toggles, let img = NSImage(systemSymbolName: expanded ? "chevron.up" : "chevron.down", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) {
-            let v = NSImageView(image: img)
-            v.contentTintColor = theme.secondary
-            v.frame = NSRect(x: w - 24, y: (r.frame.height - 16) / 2, width: 16, height: 16)
-            r.addSubview(v)
-        }
-        let tip = limit != nil ? limitTooltip() : ""
-        r.toolTip = toggles ? (tip.isEmpty ? "" : tip + "\n") + (expanded ? "คลิกเพื่อย่อรายการ" : "คลิกเพื่อดูทุก session") : tip
-        if toggles { r.onClick = { [weak self] in self?.toggleExpand() } }
+    func headerRow(_ limit: NSAttributedString, width w: CGFloat) -> RowView {
+        let r = RowView(text: limit, width: w, clickable: false)
+        r.toolTip = limitTooltip()
         return r
     }
 
