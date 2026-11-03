@@ -6,7 +6,7 @@ A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session statu
 
 | Path | What |
 |---|---|
-| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, Focus (jump to window), LINE, Discord, Updates, Reminders, usage limits (statusLine wrapper), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys, app entry plus debug modes |
+| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, Focus (jump to window), LINE, Discord, Updates, Reminders, usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys, app entry plus debug modes |
 | `hooks/angeling-hook.sh` | Claude Code hook (11 events). Writes `~/.claude/angeling-pet/state/<session>.json`, with a per-session mkdir lock and mktemp+mv writes |
 | `install.sh` / `uninstall.sh` | Installer: prebuilt app from a bundle, or builds from source. The Claude hook is optional |
 | `get.sh` | One-line installer: downloads `Angeling.zip` from the latest release and runs its `install.sh` |
@@ -18,7 +18,7 @@ A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session statu
 | `scripts/fetch-assets.sh` | Fills `assets/` from: a local Codex pet, then the latest release, then irowiki/myinstants |
 | `docs/` | User guide in **Thai**. `docs/README.md` is the index; every page ends with a link back to it |
 
-Runtime files: `~/Applications/Angeling.app`, `~/.claude/angeling-pet/` (hook, artwork, `state/`, `reminders.json`, `update.log`, and with limits on: `statusline.sh`, `statusline-orig.*`, `limits.json` from the status line, `limits-api.json` from the usage API), LaunchAgent `local.angeling.pet`, and UserDefaults domain `local.angeling.pet`.
+Runtime files: `~/Applications/Angeling.app`, `~/.claude/angeling-pet/` (hook, artwork, `state/`, `reminders.json`, `update.log`, and with limits on: `statusline.sh`, `statusline-orig.*`, `limits.json` from the status line, `limits-api.json` from the usage API, `limits-codex.json` and `limits-agy.json` for Codex and AGY), LaunchAgent `local.angeling.pet`, and UserDefaults domain `local.angeling.pet`.
 
 ## Build and check
 
@@ -34,7 +34,7 @@ ANGELING_SNAPSHOT=/path/out.png build/Angeling.app/Contents/MacOS/Angeling
 ```
 
 Fakes for snapshots are listed in `docs/Development.md`:
-- `ANGELING_EXPANDED`, `ANGELING_LIMITS`, `ANGELING_LIMIT_MODE`, `ANGELING_LIMIT_PLACE`, `ANGELING_LIMIT_STYLE`, `ANGELING_LIMIT_WINDOWS`, `ANGELING_LIMIT_OUTLINE`, `ANGELING_HIDE_ACTIVITY`, `ANGELING_HOVER`, `ANGELING_EMOTE`, `ANGELING_FORM`, `ANGELING_SETTINGS`
+- `ANGELING_EXPANDED`, `ANGELING_LIMITS`, `ANGELING_CODEX_LIMITS`, `ANGELING_AGY_LIMITS`, `ANGELING_LIMIT_MODE`, `ANGELING_LIMIT_PLACE`, `ANGELING_LIMIT_STYLE`, `ANGELING_LIMIT_WINDOWS`, `ANGELING_LIMIT_OUTLINE`, `ANGELING_HIDE_ACTIVITY`, `ANGELING_HOVER`, `ANGELING_EMOTE`, `ANGELING_FORM`, `ANGELING_SETTINGS`
 - `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_STATE_DIR`, `ANGELING_THEME`
 - `ANGELING_CHARACTER`, `ANGELING_ANIM`
 - `ANGELING_FAKE_VERSION`, `ANGELING_LATEST_VERSION`, `ANGELING_UPDATE_NOW`, `ANGELING_UPDATE_CMD`

@@ -14,7 +14,7 @@
 //   Discord row        unread DMs + @mentions (Dock badge count); click opens Discord
 //   ⌥⌘R                set a reminder (also added to Calendar); Angeling chimes at the time
 //   update row         a newer GitHub release exists; click to install it
-//   limit row / label  Claude's weekly and 5-hour usage (menu: 📊): the bubble's top row, a label under the pet, or both
+//   limit row / label  Claude's, Codex's and AGY's weekly and 5-hour usage: the bubble's top rows, labels under the pet, or both
 import AppKit
 import Carbon.HIToolbox
 import EventKit
@@ -903,7 +903,7 @@ final class ReminderForm: NSObject {
     }
 }
 
-// MARK: - Usage limits (Claude's 5-hour and weekly rate limits)
+// MARK: - Usage limits (Claude's, Codex's and AGY's 5-hour and weekly rate limits)
 // Two sources, each with its own file in the status line's shape:
 // - limits-api.json: Claude's usage API (what /usage shows), every 5 minutes, with Claude Code's own login token
 //   read through /usr/bin/security. The token is only read; refreshing it is left to Claude Code. Works from any
@@ -992,14 +992,7 @@ enum UsageLimits {
 
     /// What limits.json says now. Debug: ANGELING_LIMITS="62,40" (week,5h), "71" (week only), "none", "wait".
     static func read() -> LimitState {
-        if let fake = ProcessInfo.processInfo.environment["ANGELING_LIMITS"] {
-            if fake == "none" { return .noData }
-            if fake == "wait" { return .waiting }
-            let p = fake.split(separator: ",").compactMap { Double($0) }
-            let week = p.first.map { LimitWindow(used: $0, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600)) }
-            let five = p.count > 1 ? LimitWindow(used: p[1], resetsAt: Date().addingTimeInterval(80 * 60)) : nil
-            return .data(week: week, five: five)
-        }
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_LIMITS"] { return self.fake(fake) }
         let fm = FileManager.default
         let api = windows(apiFile), status = windows(file)
         let apiAge = ((try? fm.attributesOfItem(atPath: apiFile.path))?[.modificationDate] as? Date).map { -$0.timeIntervalSinceNow }
@@ -1008,11 +1001,26 @@ enum UsageLimits {
         return fm.fileExists(atPath: file.path) || fm.fileExists(atPath: apiFile.path) ? .noData : .waiting
     }
 
+    /// A debug fake: "62,40" (week,5h), "71" (week only), "none", "wait".
+    static func fake(_ s: String) -> LimitState {
+        if s == "none" { return .noData }
+        if s == "wait" { return .waiting }
+        let p = s.split(separator: ",").compactMap { Double($0) }
+        let week = p.first.map { LimitWindow(used: $0, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600)) }
+        let five = p.count > 1 ? LimitWindow(used: p[1], resetsAt: Date().addingTimeInterval(80 * 60)) : nil
+        return .data(week: week, five: five)
+    }
+
     /// The windows in one saved file, or nil when it has none.
-    private static func windows(_ url: URL) -> LimitState? {
+    static func windows(_ url: URL) -> LimitState? {
         guard let data = try? Data(contentsOf: url),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rl = root["rate_limits"] as? [String: Any] else { return nil }
+        return state(rl)
+    }
+
+    /// {"seven_day": {"used_percentage": 62, "resets_at": 1793…}, "five_hour": {…}}, the status line's shape.
+    static func state(_ rl: [String: Any]) -> LimitState? {
         func window(_ key: String) -> LimitWindow? {
             guard let w = rl[key] as? [String: Any], let used = (w["used_percentage"] as? NSNumber)?.doubleValue else { return nil }
             var reset: Date?
@@ -1090,9 +1098,18 @@ enum UsageLimits {
             if let s = w["resets_at"] as? String, let d = isoDate(s) { win["resets_at"] = Int((d.timeIntervalSince1970 / 60).rounded() * 60) }
             rl[key] = win
         }
+        write(rl, to: apiFile)
+    }
+
+    /// Save windows in the status line's shape, which `windows` reads back.
+    static func write(_ rl: [String: Any], to url: URL) {
         guard !rl.isEmpty, let out = try? JSONSerialization.data(withJSONObject: ["rate_limits": rl]) else { return }
         try? FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
-        try? out.write(to: apiFile, options: .atomic)
+        try? out.write(to: url, options: .atomic)
+    }
+
+    static func modified(_ url: URL) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 
     private static let iso = ISO8601DateFormatter()
@@ -1170,6 +1187,265 @@ enum UsageLimits {
             root.removeValue(forKey: "statusLine")
         }
         try saveSettings(root)
+    }
+}
+
+/// Whose limits. Claude's come from UsageLimits; Codex and AGY (Antigravity CLI) each have their own source.
+enum LimitProvider: String, CaseIterable {
+    case claude, codex, agy
+    var name: String {
+        switch self {
+        case .claude: return "Claude"
+        case .codex: return "Codex"
+        case .agy: return "AGY"
+        }
+    }
+    /// Debug fake in ANGELING_LIMITS's format: ANGELING_CODEX_LIMITS, ANGELING_AGY_LIMITS.
+    var fakeKey: String { self == .claude ? "ANGELING_LIMITS" : "ANGELING_\(rawValue.uppercased())_LIMITS" }
+    var defaultsKey: String { self == .claude ? "showLimits" : "show\(name.capitalized)Limits" }
+
+    /// The installed app's own icon (no brand artwork is shipped), or a drawn badge when it isn't installed.
+    var icon: NSImage {
+        if let cached = LimitProvider.icons[self] { return cached }
+        let apps: [String] = {
+            switch self {
+            case .claude: return ["com.anthropic.claudefordesktop"]
+            case .codex: return ["com.openai.codex", "com.openai.chat"]
+            case .agy: return ["com.google.antigravity", "com.google.Antigravity"]
+            }
+        }()
+        let image = apps.lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
+            .map { NSWorkspace.shared.icon(forFile: $0.path) } ?? badge
+        LimitProvider.icons[self] = image
+        return image
+    }
+    private static var icons: [LimitProvider: NSImage] = [:]
+
+    /// A rounded square in the provider's colour with a white symbol.
+    private var badge: NSImage {
+        let (top, bottom, symbol): (NSColor, NSColor, String) = {
+            switch self {
+            case .claude: return (NSColor(calibratedRed: 0.89, green: 0.52, blue: 0.4, alpha: 1), NSColor(calibratedRed: 0.8, green: 0.4, blue: 0.3, alpha: 1), "asterisk")
+            case .codex: return (NSColor(white: 0.25, alpha: 1), NSColor(white: 0.05, alpha: 1), "chevron.left.forwardslash.chevron.right")
+            case .agy: return (NSColor(calibratedRed: 0.3, green: 0.55, blue: 1, alpha: 1), NSColor(calibratedRed: 0.55, green: 0.3, blue: 0.95, alpha: 1), "sparkles")
+            }
+        }()
+        return NSImage(size: NSSize(width: 64, height: 64), flipped: false) { r in
+            let shape = NSBezierPath(roundedRect: r.insetBy(dx: 4, dy: 4), xRadius: 14, yRadius: 14)
+            NSGradient(starting: top, ending: bottom)?.draw(in: shape, angle: -90)
+            let config = NSImage.SymbolConfiguration(pointSize: 28, weight: .bold).applying(.init(paletteColors: [.white]))
+            if let s = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+                s.draw(in: NSRect(x: r.midX - s.size.width / 2, y: r.midY - s.size.height / 2, width: s.size.width, height: s.size.height))
+            }
+            return true
+        }
+    }
+
+    func read() -> LimitState {
+        switch self {
+        case .claude: return UsageLimits.read()
+        case .codex: return CodexLimits.read()
+        case .agy: return AgyLimits.read()
+        }
+    }
+    /// Off the main thread: may read the Keychain.
+    func fetch(_ done: @escaping (Bool) -> Void) {
+        switch self {
+        case .claude: UsageLimits.fetchFromAPI(done)
+        case .codex: CodexLimits.fetch(done)
+        case .agy: AgyLimits.fetch(done)
+        }
+    }
+}
+
+/// Codex's 5-hour and weekly limits. Two sources:
+/// - limits-codex.json: ChatGPT's usage API (what Codex's /status shows), with the token in ~/.codex/auth.json.
+///   An expired token is skipped, not refreshed: Codex renews it the next time it runs.
+/// - the newest session log in ~/.codex/sessions: Codex writes rate_limits there after each reply.
+enum CodexLimits {
+    static let apiFile = baseDir.appendingPathComponent("limits-codex.json")
+    static var codexHome: URL {
+        ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) } ?? home.appendingPathComponent(".codex")
+    }
+
+    static func read() -> LimitState {
+        if let fake = ProcessInfo.processInfo.environment[LimitProvider.codex.fakeKey] { return UsageLimits.fake(fake) }
+        let api = UsageLimits.windows(apiFile), apiDate = UsageLimits.modified(apiFile) ?? .distantPast
+        if let api, -apiDate.timeIntervalSinceNow < UsageLimits.apiFresh { return api }
+        if let log = latestLog(), api == nil || log.date > apiDate { return log.state }
+        if let api { return api }
+        return FileManager.default.fileExists(atPath: codexHome.appendingPathComponent("sessions").path) ? .noData : .waiting
+    }
+
+    /// One window from either source; the window's length says whether it is the 5-hour one or the week.
+    private static func add(_ w: [String: Any]?, seconds: Double?, resetsAt: Any?, to rl: inout [String: Any]) {
+        guard let used = (w?["used_percent"] as? NSNumber)?.doubleValue, let seconds else { return }
+        var win: [String: Any] = ["used_percentage": used]
+        if let r = resetsAt { win["resets_at"] = r }
+        rl[seconds <= 6 * 3600 ? "five_hour" : "seven_day"] = win
+    }
+
+    static func fetch(_ done: @escaping (Bool) -> Void) {
+        guard let (token, account) = loginToken(), let url = URL(string: "https://chatgpt.com/backend-api/wham/usage") else { return done(true) }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let account { req.setValue(account, forHTTPHeaderField: "ChatGPT-Account-Id") }
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("codex_cli_rs", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 200, let data { save(data) }
+            done(status != 429)
+        }.resume()
+    }
+
+    /// {"rate_limit": {"primary_window": {"used_percent": 12, "limit_window_seconds": 18000, "reset_at": 1793…}, "secondary_window": {…}}}
+    private static func save(_ data: Data) {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let limit = root["rate_limit"] as? [String: Any] else { return }
+        var rl: [String: Any] = [:]
+        for key in ["primary_window", "secondary_window"] {
+            let w = limit[key] as? [String: Any]
+            add(w, seconds: (w?["limit_window_seconds"] as? NSNumber)?.doubleValue, resetsAt: w?["reset_at"], to: &rl)
+        }
+        UsageLimits.write(rl, to: apiFile)
+    }
+
+    /// The access token and account from auth.json, while the token's JWT hasn't expired.
+    static func loginToken() -> (String, String?)? {
+        guard let data = try? Data(contentsOf: codexHome.appendingPathComponent("auth.json")),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tokens = root["tokens"] as? [String: Any], let token = tokens["access_token"] as? String else { return nil }
+        let parts = token.split(separator: ".")
+        if parts.count == 3 {
+            var b64 = parts[1].replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            b64 += String(repeating: "=", count: (4 - b64.count % 4) % 4)
+            if let p = Data(base64Encoded: b64), let claims = try? JSONSerialization.jsonObject(with: p) as? [String: Any],
+               let exp = (claims["exp"] as? NSNumber)?.doubleValue, exp < Date().timeIntervalSince1970 { return nil }
+        }
+        return (token, tokens["account_id"] as? String)
+    }
+
+    private static var logCache: (path: String, modified: Date, state: LimitState?)?
+
+    /// The last rate_limits in the newest session log (sessions/YYYY/MM/DD/rollout-….jsonl), read every 3 s,
+    /// so a log that hasn't changed isn't read again.
+    static func latestLog() -> (state: LimitState, date: Date)? {
+        let fm = FileManager.default
+        var day = codexHome.appendingPathComponent("sessions")
+        for _ in 0..<3 {
+            guard let next = (try? fm.contentsOfDirectory(atPath: day.path))?.filter({ Int($0) != nil }).max() else { return nil }
+            day.appendPathComponent(next)
+        }
+        let logs = ((try? fm.contentsOfDirectory(atPath: day.path)) ?? []).filter { $0.hasSuffix(".jsonl") }
+            .map { day.appendingPathComponent($0) }
+            .compactMap { url in UsageLimits.modified(url).map { (url, $0) } }
+            .sorted { $0.1 > $1.1 }
+        // A session that hasn't had a reply yet has none, so look a few sessions back.
+        for (url, date) in logs.prefix(5) {
+            let state: LimitState?
+            if let c = logCache, c.path == url.path, c.modified == date {
+                state = c.state
+            } else {
+                state = rateLimits(in: url)
+                logCache = (url.path, date, state)
+            }
+            if let state { return (state, date) }
+        }
+        return nil
+    }
+
+    /// {"type":"event_msg","payload":{"type":"token_count",…,"rate_limits":{"limit_id":"codex","primary":{"used_percent":40,
+    /// "window_minutes":300,"resets_at":1793…},"secondary":{…}}}}, searched from the end of the log's last 512 KB.
+    private static func rateLimits(in url: URL) -> LimitState? {
+        guard let fh = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? fh.close() }
+        let size = (try? fh.seekToEnd()) ?? 0
+        try? fh.seek(toOffset: size > 512 * 1024 ? size - 512 * 1024 : 0)
+        guard let data = try? fh.readToEnd(), let text = String(data: data, encoding: .utf8) else { return nil }
+        for line in text.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let limits = (obj["payload"] as? [String: Any])?["rate_limits"] as? [String: Any],
+                  (limits["limit_id"] as? String ?? "codex") == "codex" else { continue }
+            var rl: [String: Any] = [:]
+            for key in ["primary", "secondary"] {
+                let w = limits[key] as? [String: Any]
+                add(w, seconds: (w?["window_minutes"] as? NSNumber).map { $0.doubleValue * 60 }, resetsAt: w?["resets_at"], to: &rl)
+            }
+            if let s = UsageLimits.state(rl) { return s }
+        }
+        return nil
+    }
+}
+
+/// AGY's (Antigravity CLI's) 5-hour and weekly limits, from the quota API it uses itself, saved as limits-agy.json.
+/// Its login token is in the Keychain (service "gemini", account "antigravity"); like Claude's, it is only read.
+enum AgyLimits {
+    static let apiFile = baseDir.appendingPathComponent("limits-agy.json")
+    static let tokenFile = home.appendingPathComponent(".gemini/antigravity-cli/antigravity-oauth-token")
+
+    static func read() -> LimitState {
+        if let fake = ProcessInfo.processInfo.environment[LimitProvider.agy.fakeKey] { return UsageLimits.fake(fake) }
+        if let s = UsageLimits.windows(apiFile) { return s }
+        return FileManager.default.fileExists(atPath: apiFile.path) ? .noData : .waiting
+    }
+
+    static func fetch(_ done: @escaping (Bool) -> Void) {
+        guard let token = loginToken(), let url = URL(string: "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary") else { return done(true) }
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.httpBody = Data("{}".utf8)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("antigravity", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 401 { cachedToken = nil }
+            if status == 200, let data { save(data) }
+            done(status != 429)
+        }.resume()
+    }
+
+    /// {"groups": [{"displayName": "Claude and GPT models", "buckets": [{"window": "weekly", "remainingFraction": 0.8,
+    /// "resetTime": "2026-11-10T09:42:52Z"}, {"window": "5h", …}]}]}. Each group of models has its own windows; the
+    /// most used one counts. A remainingFraction of 0 is left out of the JSON.
+    private static func save(_ data: Data) {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let groups = root["groups"] as? [[String: Any]] else { return }
+        var rl: [String: Any] = [:]
+        for bucket in groups.flatMap({ $0["buckets"] as? [[String: Any]] ?? [] }) {
+            guard let key = ["5h": "five_hour", "weekly": "seven_day"][bucket["window"] as? String ?? ""] else { continue }
+            let used = (1 - ((bucket["remainingFraction"] as? NSNumber)?.doubleValue ?? 0)) * 100
+            if let had = (rl[key] as? [String: Any])?["used_percentage"] as? Double, had >= used { continue }
+            var win: [String: Any] = ["used_percentage": used]
+            // An unused window's reset time just moves along with the clock, so it isn't shown.
+            if used > 0, let s = bucket["resetTime"] as? String, let d = UsageLimits.isoDate(s) { win["resets_at"] = Int(d.timeIntervalSince1970) }
+            rl[key] = win
+        }
+        UsageLimits.write(rl, to: apiFile)
+    }
+
+    private static var cachedToken: (token: String, expires: Date)?
+
+    /// {"token": {"access_token": "…", "expiry": "2026-11-03T17:36:17.84+07:00", …}}, which go-keyring stores as
+    /// "go-keyring-base64:…". An expired token is skipped: AGY renews it the next time it runs.
+    static func loginToken() -> String? {
+        if let c = cachedToken, c.expires > Date() { return c.token }
+        cachedToken = nil
+        var stored = Focus.output("/usr/bin/security", ["find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"], timeout: 20)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let s = stored, s.hasPrefix("go-keyring-base64:") {
+            stored = Data(base64Encoded: String(s.dropFirst("go-keyring-base64:".count))).flatMap { String(data: $0, encoding: .utf8) }
+        }
+        for data in [stored.flatMap { $0.data(using: .utf8) }, try? Data(contentsOf: tokenFile)] {
+            guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let t = root["token"] as? [String: Any], let token = t["access_token"] as? String else { continue }
+            let expires = (t["expiry"] as? String).flatMap(UsageLimits.isoDate) ?? .distantFuture
+            guard expires > Date() else { continue }
+            cachedToken = (token, expires)
+            return token
+        }
+        return nil
     }
 }
 
@@ -1751,10 +2027,14 @@ final class PetController: NSObject, NSMenuDelegate {
     var overrideUntil: Date = .distantPast
     var lastPrimaryKey = ""
     var expanded = UserDefaults.standard.bool(forKey: "expanded")
-    var limitState = LimitState.off
+    var limitStates: [LimitProvider: LimitState] = [:]
     var limitInBubble = false   // the bubble's top row shows the limits, so the bar under the pet stays hidden
-    let limitBar = LimitBar(frame: .zero)
-    var showLimits: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMITS"] != nil || d.bool(forKey: "showLimits") }
+    let limitBars = Dictionary(uniqueKeysWithValues: LimitProvider.allCases.map { ($0, LimitBar(frame: .zero)) })
+    var showLimits: Bool { showsLimits(.claude) }
+    func showsLimits(_ p: LimitProvider) -> Bool { ProcessInfo.processInfo.environment[p.fakeKey] != nil || d.bool(forKey: p.defaultsKey) }
+    /// The providers turned on, Claude first.
+    var limitProviders: [LimitProvider] { LimitProvider.allCases.filter { showsLimits($0) } }
+    func limitState(_ p: LimitProvider) -> LimitState { limitStates[p] ?? .off }
     var limitsLeft: Bool { (ProcessInfo.processInfo.environment["ANGELING_LIMIT_MODE"] ?? d.string(forKey: "limitMode")) == "left" }
     /// Where the limits show: "auto" (the bubble's top row, or the bar while that row isn't showing), "both", or "bar".
     /// What sits under the pet: "both" (power bar and numbers), "bar", or "text".
@@ -1846,8 +2126,10 @@ final class PetController: NSObject, NSMenuDelegate {
         emote.isHidden = true
         content.addSubview(emote)
         toggle.onClick = { [weak self] in self?.toggleActivity() }
-        content.addSubview(limitBar)
-        limitBar.isHidden = true
+        for p in LimitProvider.allCases {
+            content.addSubview(limitBars[p]!)
+            limitBars[p]!.isHidden = true
+        }
         if d.bool(forKey: "showLimits") { UsageLimits.refreshWrapper() }
         pollLimits()
         fetchLimits()
@@ -2510,30 +2792,37 @@ final class PetController: NSObject, NSMenuDelegate {
         statusItem.button?.title = count > 0 ? " \(count)" : ""
 
         // The limits sit on the bubble's top row; when that row isn't showing, a small bar under the pet does.
-        var barShown = false
-        if showLimits && (limitPlace != "auto" || !(showBubble && limitInBubble)), limitState != .off {
-            barShown = true
-            limitBar.style = limitStyle
-            limitBar.outline = limitOutline
-            limitBar.remaining = limitsLeft
-            limitBar.week = nil
-            limitBar.five = nil
-            if case let .data(allWeek, allFive) = limitState {
+        // With more than one provider on, each gets its own bar, Claude on top, and its name on the label.
+        let providers = limitProviders
+        var shownBars: [LimitBar] = []
+        for p in LimitProvider.allCases {
+            let bar = limitBars[p]!, state = limitState(p)
+            bar.isHidden = true
+            guard providers.contains(p), limitPlace != "auto" || !(showBubble && limitInBubble), state != .off else { continue }
+            bar.isHidden = false
+            shownBars.append(bar)
+            bar.style = limitStyle
+            bar.outline = limitOutline
+            bar.remaining = limitsLeft
+            bar.week = nil
+            bar.five = nil
+            let name = providers.count > 1 ? p.name : nil
+            if case let .data(allWeek, allFive) = state {
                 let (week, five) = shownLimits(allWeek, allFive)
-                limitBar.text = limitBarText(week: week, five: five)
-                limitBar.week = week
-                limitBar.five = five
+                bar.text = limitBarText(name: name, week: week, five: five)
+                bar.week = week
+                bar.five = five
             } else {
-                // Say so rather than show nothing: the limits only arrive when a Claude Code status line redraws.
-                limitBar.text = NSAttributedString(string: limitState == .waiting ? "limit: รอข้อมูล…" : "limit: ยังไม่มีข้อมูล",
-                                                   attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)])
+                // Say so rather than show nothing: Claude's limits only arrive when a Claude Code status line redraws.
+                bar.text = NSAttributedString(string: "\(name ?? "limit"): " + (state == .waiting ? "รอข้อมูล…" : "ยังไม่มีข้อมูล"),
+                                              attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)])
             }
-            limitBar.toolTip = limitTooltip()
-            limitBar.needsDisplay = true
+            bar.toolTip = limitTooltip(p)
+            bar.needsDisplay = true
         }
-        limitBar.isHidden = !barShown
-        let barSize = limitBar.size
-        let petBase: CGFloat = barShown ? barSize.height + 2 : 0
+        let barGap: CGFloat = 4
+        let barsHeight = shownBars.reduce(0) { $0 + $1.size.height } + barGap * CGFloat(max(shownBars.count - 1, 0))
+        let petBase: CGFloat = shownBars.isEmpty ? 0 : barsHeight + 2
 
         // Emote floats above the head (like in RO); the bubble moves up to make room for it.
         var emoteRect = NSRect.zero
@@ -2552,7 +2841,12 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         keepOnScreen()
         pet.frame = NSRect(x: (winWidth - petSize.width) / 2, y: petBase, width: petSize.width, height: petSize.height)
-        limitBar.frame = NSRect(x: round((winWidth - barSize.width) / 2), y: 1, width: barSize.width, height: barSize.height)
+        var barY: CGFloat = 1
+        for bar in shownBars.reversed() {
+            let sz = bar.size
+            bar.frame = NSRect(x: round((winWidth - sz.width) / 2), y: barY, width: sz.width, height: sz.height)
+            barY += sz.height + barGap
+        }
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
         // Collapsed lists leave LINE and Discord out, so their counts go on the pet.
         lineBadge.count = (activityHidden || !expanded) && showLine ? lineUnread : 0
@@ -2575,7 +2869,8 @@ final class PetController: NSObject, NSMenuDelegate {
         let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)" : "")
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
-        return "\(expanded)|\(limitState.signature)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
+        let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)" }.joined()
+        return "\(expanded)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -2681,11 +2976,12 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
-        // The top row: the limits, when shown.
+        // The top rows: the limits, when shown, one row per provider.
         func withHeader(_ rows: [RowView]) -> [RowView] {
-            guard let limit = limitText() else { return rows }
+            let header = limitProviders.compactMap { p in limitText(p).map { headerRow($0, p, width: w) } }
+            guard !header.isEmpty else { return rows }
             limitInBubble = true
-            return [headerRow(limit, width: w)] + rows
+            return header + rows
         }
 
         limitInBubble = false
@@ -2728,44 +3024,51 @@ final class PetController: NSObject, NSMenuDelegate {
 
     // MARK: usage limits
 
-    var limitFetching = false
-    var limitBackoff = Date.distantPast
+    var limitFetching: Set<LimitProvider> = []
+    var limitBackoff: [LimitProvider: Date] = [:]
 
-    /// Asks Claude's usage API (every 5 minutes, and when the limits are turned on); 30 minutes' rest after a 429.
+    /// Asks each provider's usage API (every 5 minutes, and when its limits are turned on); 30 minutes' rest after a 429.
     func fetchLimits() {
         let env = ProcessInfo.processInfo.environment
-        guard showLimits, !limitFetching, Date() > limitBackoff, env["ANGELING_LIMITS"] == nil, env["ANGELING_SNAPSHOT"] == nil else { return }
-        limitFetching = true
-        DispatchQueue.global(qos: .utility).async {
-            UsageLimits.fetchFromAPI { ok in
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    self.limitFetching = false
-                    if !ok { self.limitBackoff = Date().addingTimeInterval(1800) }
-                    self.pollLimits()
+        guard env["ANGELING_SNAPSHOT"] == nil else { return }
+        for p in limitProviders where env[p.fakeKey] == nil && !limitFetching.contains(p) && Date() > limitBackoff[p] ?? .distantPast {
+            limitFetching.insert(p)
+            DispatchQueue.global(qos: .utility).async {
+                p.fetch { ok in
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.limitFetching.remove(p)
+                        if !ok { self.limitBackoff[p] = Date().addingTimeInterval(1800) }
+                        self.pollLimits()
+                    }
                 }
             }
         }
     }
 
     func pollLimits() {
-        let s = showLimits ? UsageLimits.read() : .off
-        if s != limitState { limitState = s }
-        // Crossing 90% gets one surprised face per reset cycle.
-        guard case let .data(week, five) = s, ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil else { return }
-        for (key, win) in [("week", week), ("five", five)] {
-            guard let win, win.used >= 90 else { continue }
-            let stamp = "\(Int(win.resetsAt?.timeIntervalSince1970 ?? 0))"
-            if d.string(forKey: "limitAlert-\(key)") != stamp {
-                d.set(stamp, forKey: "limitAlert-\(key)")
-                showEmote("omg", for: 4)
+        let snapshot = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] != nil
+        for p in LimitProvider.allCases {
+            let s = showsLimits(p) ? p.read() : .off
+            if s != limitState(p) { limitStates[p] = s }
+            // Crossing 90% gets one surprised face per reset cycle.
+            guard case let .data(week, five) = s, !snapshot else { continue }
+            for (window, win) in [("week", week), ("five", five)] {
+                guard let win, win.used >= 90 else { continue }
+                let key = p == .claude ? "limitAlert-\(window)" : "limitAlert-\(p.rawValue)-\(window)"
+                let stamp = "\(Int(win.resetsAt?.timeIntervalSince1970 ?? 0))"
+                if d.string(forKey: key) != stamp {
+                    d.set(stamp, forKey: key)
+                    showEmote("omg", for: 4)
+                }
             }
         }
     }
 
     /// "สัปดาห์ 62%  ·  5 ชม. 40%", or "สัปดาห์ 71%  ·  รีเซ็ต จ. 11:00" without a 5-hour window.
-    func limitText() -> NSAttributedString? {
-        guard showLimits, limitPlace != "bar", case let .data(allWeek, allFive) = limitState else { return nil }
+    /// With more than one provider on, the row starts with the provider's name: "Codex  สัปดาห์ 12%  ·  5 ชม. 3%".
+    func limitText(_ p: LimitProvider) -> NSAttributedString? {
+        guard showsLimits(p), limitPlace != "bar", case let .data(allWeek, allFive) = limitState(p) else { return nil }
         let (week, five) = shownLimits(allWeek, allFive)
         let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: theme.secondary]
         let out = NSMutableAttributedString()
@@ -2782,17 +3085,24 @@ final class PetController: NSObject, NSMenuDelegate {
         if (week == nil) != (five == nil), let r = (week ?? five)?.resetsAt {
             out.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r))", attributes: label))
         }
-        return out.length > 0 ? out : nil
+        guard out.length > 0 else { return nil }
+        if limitProviders.count > 1 {
+            out.insert(NSAttributedString(string: p.name + "  ", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: theme.secondary]), at: 0)
+        }
+        return out
     }
 
     /// The label under the pet: the 5-hour window first, since it runs out sooner.
-    func limitBarText(week: LimitWindow?, five: LimitWindow?) -> NSAttributedString {
+    func limitBarText(name: String?, week: LimitWindow?, five: LimitWindow?) -> NSAttributedString {
         let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)]
         let out = NSMutableAttributedString()
-        for (name, win) in [("5 ชม.", five), ("สัปดาห์", week)] {
+        if let name { out.append(NSAttributedString(string: name + "  ", attributes: [.font: NSFont.boldSystemFont(ofSize: 10), .foregroundColor: NSColor.white])) }
+        var first = true
+        for (window, win) in [("5 ชม.", five), ("สัปดาห์", week)] {
             guard let win else { continue }
-            if out.length > 0 { out.append(NSAttributedString(string: "  ·  ", attributes: label)) }
-            out.append(NSAttributedString(string: name + (limitsLeft ? " เหลือ " : " "), attributes: label))
+            if !first { out.append(NSAttributedString(string: "  ·  ", attributes: label)) }
+            first = false
+            out.append(NSAttributedString(string: window + (limitsLeft ? " เหลือ " : " "), attributes: label))
             let v = limitsLeft ? 100 - win.used : win.used
             out.append(NSAttributedString(string: "\(Int(v.rounded()))%",
                                           attributes: [.font: NSFont.boldSystemFont(ofSize: 10), .foregroundColor: limitBarColor(win.used)]))
@@ -2801,11 +3111,21 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     /// One line per window, with the reset time and how long until it.
-    func limitMenuLines() -> [String] {
-        switch limitState {
+    func limitMenuLines(_ p: LimitProvider) -> [String] {
+        switch limitState(p) {
         case .off: return []
-        case .waiting: return ["รอข้อมูลจาก Claude…"]
-        case .noData: return ["ยังไม่มีข้อมูล limit: ส่งข้อความใน Claude Code สักครั้ง (บัญชี API key ไม่มีข้อมูลนี้)"]
+        case .waiting:
+            switch p {
+            case .claude: return ["รอข้อมูลจาก Claude…"]
+            case .codex: return ["รอข้อมูลจาก Codex… (ใช้ Codex สักครั้ง)"]
+            case .agy: return ["รอข้อมูลจาก AGY… (เปิด agy สักครั้งเพื่อต่ออายุ login)"]
+            }
+        case .noData:
+            switch p {
+            case .claude: return ["ยังไม่มีข้อมูล limit: ส่งข้อความใน Claude Code สักครั้ง (บัญชี API key ไม่มีข้อมูลนี้)"]
+            case .codex: return ["ยังไม่มีข้อมูล limit: ส่งข้อความใน Codex สักครั้ง (บัญชี API key ไม่มีข้อมูลนี้)"]
+            case .agy: return ["ยังไม่มีข้อมูล limit ของ AGY"]
+            }
         case let .data(week, five):
             return [("สัปดาห์นี้", week), ("5 ชม.", five)].compactMap { name, win in
                 guard let win else { return nil }
@@ -2817,11 +3137,13 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
 
-    func limitTooltip() -> String { limitMenuLines().joined(separator: "\n") }
+    func limitTooltip(_ p: LimitProvider) -> String {
+        ((limitProviders.count > 1 ? [p.name] : []) + limitMenuLines(p)).joined(separator: "\n")
+    }
 
-    func headerRow(_ limit: NSAttributedString, width w: CGFloat) -> RowView {
+    func headerRow(_ limit: NSAttributedString, _ p: LimitProvider, width w: CGFloat) -> RowView {
         let r = RowView(text: limit, width: w, clickable: false)
-        r.toolTip = limitTooltip()
+        r.toolTip = limitTooltip(p)
         return r
     }
 
@@ -2838,6 +3160,15 @@ final class PetController: NSObject, NSMenuDelegate {
             a.runModal()
         }
         d.set(on, forKey: "showLimits")
+        pollLimits()
+        fetchLimits()
+        refresh()
+    }
+
+    /// Codex and AGY need nothing set up: turning them on only starts reading their usage.
+    func setShowsLimits(_ p: LimitProvider, _ on: Bool) {
+        if p == .claude { if on != showLimits { toggleLimits() }; return }
+        d.set(on, forKey: p.defaultsKey)
         pollLimits()
         fetchLimits()
         refresh()
@@ -2887,7 +3218,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: return "ทั่วไป"
         case .look: return "หน้าตา"
         case .alerts: return "แจ้งเตือน"
-        case .limits: return "Claude limit"
+        case .limits: return "limit"
         case .updates: return "อัปเดต"
         }
     }
@@ -2905,7 +3236,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: return 360
         case .look: return 560
         case .alerts: return 280
-        case .limits: return 450
+        case .limits: return 720
         case .updates: return 250
         }
     }
@@ -3001,13 +3332,20 @@ struct SettingsPane: View {
                 }
             }
         case .limits:
-            Section {
-                Toggle("แสดง limit การใช้งาน Claude", isOn: m.bind({ c.showLimits }, { if $0 != c.showLimits { c.toggleLimits() } }))
-                if c.showLimits {
-                    ForEach(c.limitMenuLines(), id: \.self) { Text($0).foregroundStyle(.secondary) }
+            ForEach(LimitProvider.allCases, id: \.self) { p in
+                Section {
+                    Toggle(isOn: m.bind({ c.showsLimits(p) }, { c.setShowsLimits(p, $0) })) {
+                        HStack(spacing: 8) {
+                            Image(nsImage: p.icon).resizable().interpolation(.high).frame(width: 22, height: 22)
+                            Text("แสดง limit การใช้งาน \(p.name)")
+                        }
+                    }
+                    if c.showsLimits(p) {
+                        ForEach(c.limitMenuLines(p), id: \.self) { Text($0).foregroundStyle(.secondary) }
+                    }
+                } footer: {
+                    Text(limitSourceText(p)).font(.caption).foregroundStyle(.secondary)
                 }
-            } footer: {
-                Text("อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code) และจาก status line ของ Claude Code").font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Picker("แสดงเป็น", selection: m.bind({ c.limitsLeft ? "left" : "used" }, { c.setLimitMode($0) })) {
@@ -3032,7 +3370,7 @@ struct SettingsPane: View {
                 Toggle("ขอบหลอดพลัง", isOn: m.bind({ c.limitOutline }, { c.setLimitOutline($0) }))
                     .disabled(c.limitStyle == "text")
             }
-            .disabled(!c.showLimits)
+            .disabled(c.limitProviders.isEmpty)
         case .updates:
             Section {
                 LabeledContent("เวอร์ชันที่ใช้อยู่", value: Updater.current)
@@ -3054,6 +3392,14 @@ struct SettingsPane: View {
                     Button("ตรวจหาเวอร์ชันใหม่ตอนนี้") { c.checkUpdatesNow() }
                 }
             }
+        }
+    }
+
+    func limitSourceText(_ p: LimitProvider) -> String {
+        switch p {
+        case .claude: return "อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code) และจาก status line ของ Claude Code"
+        case .codex: return "อ่านจาก usage API ของ ChatGPT ทุก 5 นาที (ใช้ login ของ Codex) และจาก log session ล่าสุดของ Codex"
+        case .agy: return "อ่านจาก quota API ของ Antigravity ทุก 5 นาที (ใช้ login ของ agy จาก Keychain)"
         }
     }
 

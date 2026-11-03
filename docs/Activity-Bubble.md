@@ -70,7 +70,7 @@ LINE และ Discord ไม่เป็นแถวในแบบย่อ �
 
 **แบบขยาย** แสดงทุก session พร้อม prompt และ task list รวมถึงแถว LINE และ Discord
 
-ถ้าเปิด[limit การใช้งาน](Usage-Limits.md)ไว้ แถวบนสุดจะแสดง limit
+ถ้าเปิด[limit การใช้งาน](Usage-Limits.md)ไว้ แถวบนสุดจะแสดง limit (ถ้าเปิดหลายตัว เช่น Claude และ Codex จะมีแถวละตัว)
 
 ## ป้ายตัวเลขบน Angeling
 
