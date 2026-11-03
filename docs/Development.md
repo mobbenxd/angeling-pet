@@ -37,6 +37,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 |---|---|
 | `ANGELING_EXPANDED=1` | แบบขยาย (ไม่ใส่ = แบบย่อ ไม่ว่าจะเลือกอะไรไว้) |
 | `ANGELING_LIMITS=62,40` | จำลอง limit สัปดาห์,5 ชม. (`71` = มีแค่สัปดาห์, `none` = ยังไม่มีตัวเลข limit, `wait` = ยังไม่มีข้อมูล) และเปิดการแสดง limit |
+| `ANGELING_CODEX_LIMITS=12,88`, `ANGELING_AGY_LIMITS=71` | จำลอง limit ของ Codex และ AGY แบบเดียวกับ `ANGELING_LIMITS` และเปิดการแสดง |
 | `ANGELING_LIMIT_MODE=left` | แสดง limit เป็น % ที่เหลือ |
 | `ANGELING_LIMIT_PLACE=both` | ที่แสดง limit (`auto`, `both`, `bar`) |
 | `ANGELING_LIMIT_STYLE=bar` | ใต้ Angeling แสดงอะไร (`both` = หลอดพลังและตัวเลข, `bar`, `text`) |
