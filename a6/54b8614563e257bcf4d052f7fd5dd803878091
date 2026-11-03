@@ -1,0 +1,25 @@
+src/main.swift
+  s_78dc238eb8731f::t_4194e46c8bf7d1 2328-2329,2684-2688,2701,2726,2822-2824
+docs/Activity-Bubble.md
+  s_78dc238eb8731f::t_d878932a3e98ee 53-55,73
+docs/Usage.md
+  s_78dc238eb8731f::t_d878932a3e98ee 12,16
+README.md
+  s_78dc238eb8731f::t_d878932a3e98ee 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a654b8614563e257bcf4d052f7fd5dd803878091",
+  "prompts": {},
+  "sessions": {
+    "s_78dc238eb8731f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0dcb6b2f-2e3c-4972-9dc8-87a08725e49d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
