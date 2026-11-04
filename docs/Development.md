@@ -54,6 +54,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_UPDATE_CMD="…"` | คำสั่งที่ใช้แทน `get.sh` ตอนอัปเดต |
 | `ANGELING_REMINDERS=/path.json` | ใช้ไฟล์การเตือนจำลอง (snapshot จะไม่ส่งเสียง) |
 | `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
+| `ANGELING_MENU=1` | จับภาพรายการในเมนูของไอคอนแถบเมนู (วาดเป็นรายการธรรมดา เพราะวาด NSMenu จริงนอกจอไม่ได้) |
 | `ANGELING_SETTINGS=look` | จับภาพหน้าต่างตั้งค่าหมวดนี้แทนตัว Angeling (`general`, `look`, `alerts`, `limits`, `updates`) |
 | `ANGELING_CHARACTER=thunder` | ใช้ตัวละครนี้ (`angeling`, `id` ของเพ็ตใน `pets/` หรือ `id` ใน `characters.json`) |
 | `ANGELING_ANIM=failed` | เล่นท่านี้ (`idle`, `running`, `review`, `waiting`, `failed`, `waving`, `jumping`, `running-left`, `running-right`) |

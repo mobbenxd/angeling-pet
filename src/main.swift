@@ -2550,6 +2550,10 @@ final class PetController: NSObject, NSMenuDelegate {
                 i.toolTip = s.text
             }
             m.addItem(.separator())
+            if !limitProviders.isEmpty {
+                for i in limitMenuItems() { m.addItem(i) }
+                m.addItem(.separator())
+            }
             item(petHidden ? "แสดง Angeling" : "ซ่อน Angeling", #selector(togglePet))
         } else {
             item(expanded ? "ย่อรายการ" : "ดูทุก session", #selector(toggleExpand))
@@ -3141,6 +3145,42 @@ final class PetController: NSObject, NSMenuDelegate {
         ((limitProviders.count > 1 ? [p.name] : []) + limitMenuLines(p)).joined(separator: "\n")
     }
 
+    /// The menu bar menu's limits: per provider a heading with its icon, then one line per window,
+    /// "5 ชม.  เหลือ 93%  ·  รีเซ็ต 12:30 (อีก 2 ชม. 49 นาที)", 5-hour first. Clicking opens the limit settings.
+    func limitMenuItems() -> [NSMenuItem] {
+        let small: [NSAttributedString.Key: Any] = [.font: NSFont.menuFont(ofSize: 12), .foregroundColor: NSColor.secondaryLabelColor]
+        func entry(_ title: NSAttributedString, indent: Int) -> NSMenuItem {
+            let i = NSMenuItem(title: title.string, action: #selector(openLimitSettings), keyEquivalent: "")
+            i.attributedTitle = title
+            i.target = self
+            i.indentationLevel = indent
+            return i
+        }
+        var items: [NSMenuItem] = []
+        for p in limitProviders {
+            let head = entry(NSAttributedString(string: p.name, attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)]), indent: 0)
+            let full = p.icon
+            head.image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { full.draw(in: $0); return true }
+            items.append(head)
+            guard case let .data(week, five) = limitState(p) else {
+                items += limitMenuLines(p).map { entry(NSAttributedString(string: $0, attributes: small), indent: 1) }
+                continue
+            }
+            for (name, win) in [("5 ชม.", five), ("สัปดาห์", week)] {
+                guard let win else { continue }
+                let line = NSMutableAttributedString(string: name + (limitsLeft ? "  เหลือ " : "  ใช้ไป "), attributes: [.font: NSFont.menuFont(ofSize: 0)])
+                let v = limitsLeft ? 100 - win.used : win.used
+                line.append(NSAttributedString(string: "\(Int(v.rounded()))%",
+                                               attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize), .foregroundColor: limitColor(win.used)]))
+                if let r = win.resetsAt { line.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r)) (\(limitCountdown(r)))", attributes: small)) }
+                items.append(entry(line, indent: 1))
+            }
+        }
+        return items
+    }
+
+    @objc func openLimitSettings() { settings.show(.limits) }
+
     func headerRow(_ limit: NSAttributedString, _ p: LimitProvider, width w: CGFloat) -> RowView {
         let r = RowView(text: limit, width: w, clickable: false)
         r.toolTip = limitTooltip(p)
@@ -3544,6 +3584,40 @@ NSApp.mainMenu = {
 // Debug: ANGELING_UPDATE_NOW=1 starts an update right away (pair with ANGELING_UPDATE_CMD).
 if ProcessInfo.processInfo.environment["ANGELING_UPDATE_NOW"] != nil { controller.runUpdate() }
 
+/// Debug: the menu bar menu's items laid out as a plain list (a real NSMenu can't be drawn offscreen).
+func menuPreview(_ menu: NSMenu) -> NSView {
+    let width: CGFloat = 420
+    var rows: [NSView] = []
+    for item in menu.items {
+        let x = 10 + CGFloat(item.indentationLevel) * 14
+        let row = NSView(frame: NSRect(x: 0, y: 0, width: width, height: item.isSeparatorItem ? 11 : 22))
+        if item.isSeparatorItem {
+            let line = NSBox(frame: NSRect(x: 10, y: 5, width: width - 20, height: 1))
+            line.boxType = .separator
+            row.addSubview(line)
+        } else {
+            var textX = x + 14
+            if let img = item.image {
+                let icon = NSImageView(image: img)
+                icon.frame = NSRect(x: textX, y: 3, width: 16, height: 16)
+                row.addSubview(icon)
+                textX += 22
+            }
+            let label = NSTextField(labelWithAttributedString: item.attributedTitle ?? NSAttributedString(string: item.title))
+            if !item.isEnabled { label.textColor = .disabledControlTextColor }
+            label.frame = NSRect(x: textX, y: 2, width: width - textX - 8, height: 18)
+            row.addSubview(label)
+        }
+        rows.append(row)
+    }
+    let height = rows.reduce(8) { $0 + $1.frame.height }
+    let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+    view.appearance = NSAppearance(named: .aqua)  // the snapshot fills the background light
+    var y = height - 4
+    for r in rows { y -= r.frame.height; r.frame.origin.y = y; view.addSubview(r) }
+    return view
+}
+
 // Debug: ANGELING_SNAPSHOT=/path.png renders the window to a PNG after a moment, then quits.
 if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     let env = ProcessInfo.processInfo.environment
@@ -3561,8 +3635,9 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     if let t = env["ANGELING_SETTINGS"] { controller.settings.show(SettingsTab(rawValue: t) ?? .general) }
     if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        let windowed = env["ANGELING_FORM"] != nil || env["ANGELING_SETTINGS"] != nil
-        let v = env["ANGELING_SETTINGS"] != nil ? controller.settings.window.contentView!
+        let windowed = env["ANGELING_FORM"] != nil || env["ANGELING_SETTINGS"] != nil || env["ANGELING_MENU"] != nil
+        let v = env["ANGELING_MENU"] != nil ? menuPreview(controller.makeMenu(forStatusBar: true))
+              : env["ANGELING_SETTINGS"] != nil ? controller.settings.window.contentView!
               : env["ANGELING_FORM"] != nil ? controller.reminderForm.window.contentView! : controller.panel.contentView!
         if let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
             v.cacheDisplay(in: v.bounds, to: rep)
