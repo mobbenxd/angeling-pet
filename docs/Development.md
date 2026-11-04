@@ -42,6 +42,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_LIMIT_PLACE=both` | ที่แสดง limit (`auto`, `both`, `bar`) |
 | `ANGELING_LIMIT_STYLE=bar` | ใต้ Angeling แสดงอะไร (`both` = หลอดพลังและตัวเลข, `bar`, `text`) |
 | `ANGELING_LIMIT_WINDOWS=five` | limit ที่แสดง (`both`, `five`, `week`) |
+| `ANGELING_LIMIT_SIZE=large` | ขนาดหลอดพลัง (`small`, `medium`, `large`) |
 | `ANGELING_LIMIT_OUTLINE=0` | ปิดขอบหลอดพลัง (`1` = เปิด) |
 | `ANGELING_HIDE_ACTIVITY=1` | ซ่อนบับเบิล (เห็นป้ายตัวเลข) |
 | `ANGELING_HOVER=1` | แสดงปุ่มซ่อนหรือแสดง |
