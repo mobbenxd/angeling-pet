@@ -2,7 +2,7 @@
 
 ## เลือกตัวละคร Bomber
 
-เมนู → **ตั้งค่า… → หน้าตา** ส่วน **ตัวละคร** กลุ่มแรกคือ Angeling, Bee Husky (ลูกหมาไซบีเรียนฮัสกี้) และ Banana Dog (หมาตัวเป็นกล้วย) ที่ทำท่าได้ครบเหมือน Angeling กลุ่มที่สองคือตัวละครจากเกม Bomber 18 ตัว:
+เมนู → **ตั้งค่า… → หน้าตา** ส่วน **ตัวละคร** กลุ่มแรกคือ Angeling, Bee Husky (ลูกหมาไซบีเรียนฮัสกี้), Banana Dog (หมาตัวเป็นกล้วย) และ Dino (ไดโนเสาร์ T-rex สีเขียว) ที่ทำท่าได้ครบเหมือน Angeling กลุ่มที่สองคือตัวละครจากเกม Bomber 18 ตัว:
 Thunder, Bomber Horse, Bomber Husky, Bomber Cat, Cool Pomeranian, Pumpkin Raccoon, Chubby Valkyrie, Chubby Drake, Chubby Mage, Chubby Beerus, Chubby Legend, Carrot Engineer, Sun Sage, Noid, Chick Squad, Chubby Cloudy, Tommy Shelby, Charles Leclerc
 
 คลิกที่รูปเพื่อใช้ตัวนั้น ตัวละครเปลี่ยนและโบกมือทันทีและจำไว้หลังเปิดแอปใหม่ ท่าทางของตัวละคร Bomber:

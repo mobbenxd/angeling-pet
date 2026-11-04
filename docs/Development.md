@@ -101,6 +101,10 @@ swift scripts/import-pet.swift ~/Downloads/huskey.png bee-husky "Bee Husky"
 swift scripts/import-pet.swift ~/Downloads/banana-dog.webp banana-dog "Banana Dog" "A pixel-art yellow dog with a banana body."
 ```
 
+```bash
+swift scripts/import-pet.swift ~/Downloads/dino.webp dino "Dino" "A cute cartoon green T-rex with a cream belly and a big toothy grin."
+```
+
 ทุก Release ต้องแนบไฟล์ครบทุกตัว เพราะ `get.sh` และ `fetch-assets.sh` ดึงจาก `releases/latest`
 
 ทดสอบตัวติดตั้งกับไฟล์ในเครื่อง โดยไม่ยุ่งกับการติดตั้งจริง:
