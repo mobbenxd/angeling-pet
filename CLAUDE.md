@@ -13,7 +13,7 @@ A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session statu
 | `scripts/build.sh` | `swiftc` build into an `.app`. Version comes from `ANGELING_VERSION`, then the latest git tag, then `dev` |
 | `scripts/package.sh <ver>` | Universal (arm64+x86_64) app plus release files in `dist/` |
 | `scripts/import-characters.py <zip>` | Builds `assets/characters/` (sheets + `characters.json` frame table) from the Bomber character pack |
-| `scripts/import-pet.swift <sheet> <id> "<Name>"` | Fits a generated sheet onto the Codex v2 grid as `assets/pets/<id>/` (Bee Husky came from `~/Downloads/huskey.png`, Banana Dog from `~/Downloads/banana-dog.webp`, Dino from `~/Downloads/dino.webp`) |
+| `scripts/import-pet.swift <sheet> <id> "<Name>"` | Fits a generated sheet onto the Codex v2 grid as `assets/pets/<id>/` (Bee Husky came from `~/Downloads/huskey.png`, Banana Dog from `~/Downloads/banana-dog.webp`, Dino from `~/Downloads/dino.webp`, Business Unicorn from `~/Downloads/unicorn-sheet-fixed.png`) |
 | `scripts/make-icon.swift <sheet> <out.icns>` | App icon from Angeling's first idle frame; `build.sh` runs it when the artwork is present (the icon is never committed) |
 | `scripts/fetch-assets.sh` | Fills `assets/` from: a local Codex pet, then the latest release, then irowiki/myinstants |
 | `docs/` | User guide in **Thai**. `docs/README.md` is the index; every page ends with a link back to it |
@@ -54,7 +54,7 @@ Installer tests go in a throwaway HOME:
   3. verify with the real one-liner in a throwaway HOME
 
   Running apps notice a new release within 6 h.
-- **Artwork** (Angeling sprite sheet, Ragnarok emotes, level-up sound) is © Gravity. It is never committed (see `.gitignore`); it ships only as release assets. The Bomber characters (`assets/characters/`, built by `scripts/import-characters.py`) follow the same rule and ship as `characters.zip`; extra Codex pets (`assets/pets/`, e.g. Bee Husky, Banana Dog, Dino) ship as `pets.zip`.
+- **Artwork** (Angeling sprite sheet, Ragnarok emotes, level-up sound) is © Gravity. It is never committed (see `.gitignore`); it ships only as release assets. The Bomber characters (`assets/characters/`, built by `scripts/import-characters.py`) follow the same rule and ship as `characters.zip`; extra Codex pets (`assets/pets/`, e.g. Bee Husky, Banana Dog, Dino, Business Unicorn) ship as `pets.zip`.
 - **Privacy**: LINE and Discord show **counts only**, read from each app's Dock badge via `lsappinfo`. Do not read message contents or the Notification Center database, and do not ask for Full Disk Access. The user decided this explicitly.
 - **UI text** is Thai and **code comments** are English, matching the existing style. Keep `main.swift` as one file and follow its section layout.
 - **Signing** is ad-hoc. macOS privacy grants (Calendar) are tied to the exact build, so expect re-prompts after updates. A fixed-DR signing experiment did not make grants persist and was reverted.
