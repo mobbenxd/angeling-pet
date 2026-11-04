@@ -1450,9 +1450,10 @@ enum AgyLimits {
 }
 
 /// The limits under the pet while the bubble doesn't show them. Under the pet a power bar: two outlined
-/// 72 px pills (outline optional) with a gap, the week on top (7 px) and the 5-hour window under it (5 px), or one 8 px pill
+/// pills (outline optional) with a 2 px gap, the thicker week on top and the 5-hour window under it, or one pill
 /// when there is only one window; under the bar a small dark
-/// label with both numbers, "5 ชม. 60%  ·  สัปดาห์ 38%". `style` picks "bar", "text" or "both".
+/// label with both numbers, "5 ชม. 60%  ·  สัปดาห์ 38%". `style` picks "bar", "text" or "both";
+/// `barScale` picks "small", "medium" or "large" (see `dims`).
 final class LimitBar: NSView {
     var text = NSAttributedString()
     var week: LimitWindow?
@@ -1460,7 +1461,19 @@ final class LimitBar: NSView {
     var remaining = false
     var style = "both"
     var outline = true
-    var barSize: NSSize { NSSize(width: 72, height: week != nil && five != nil ? 14 : 8) }
+    var barScale = "small"
+    /// Width, week pill, 5-hour pill, and the single pill's height when only one window shows.
+    private var dims: (width: CGFloat, week: CGFloat, five: CGFloat, single: CGFloat) {
+        switch barScale {
+        case "large": return (72, 7, 5, 8)
+        case "medium": return (56, 5, 4, 6)
+        default: return (40, 4, 3, 4)
+        }
+    }
+    var barSize: NSSize {
+        let d = dims
+        return NSSize(width: d.width, height: week != nil && five != nil ? d.week + 2 + d.five : d.single)
+    }
     /// No numbers yet (waiting / no data): only the label, which says so.
     var hasBar: Bool { style != "text" && (week != nil || five != nil) }
     var hasText: Bool { style != "bar" || !hasBar }
@@ -1509,8 +1522,9 @@ final class LimitBar: NSView {
             edge.stroke()
         }
         if week != nil && five != nil {
-            pill(five, y: r.minY, h: 5)
-            pill(week, y: r.minY + 7, h: 7)
+            let d = dims
+            pill(five, y: r.minY, h: d.five)
+            pill(week, y: r.minY + d.five + 2, h: d.week)
         } else {
             pill(week ?? five, y: r.minY, h: r.height)
         }
@@ -2039,6 +2053,8 @@ final class PetController: NSObject, NSMenuDelegate {
     /// Where the limits show: "auto" (the bubble's top row, or the bar while that row isn't showing), "both", or "bar".
     /// What sits under the pet: "both" (power bar and numbers), "bar", or "text".
     /// Whether the power bar's pills have a light outline.
+    /// How big the power bar is: "small", "medium" or "large".
+    var limitBarScale: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_SIZE"] ?? d.string(forKey: "limitBarScale") ?? "small" }
     var limitOutline: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMIT_OUTLINE"].map { $0 != "0" } ?? (d.object(forKey: "limitOutline") as? Bool ?? true) }
     /// Which windows the bubble row and the bar / label show: "both", "five" or "week".
     var limitWindows: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_WINDOWS"] ?? d.string(forKey: "limitWindows") ?? "both" }
@@ -2807,6 +2823,7 @@ final class PetController: NSObject, NSMenuDelegate {
             shownBars.append(bar)
             bar.style = limitStyle
             bar.outline = limitOutline
+            bar.barScale = limitBarScale
             bar.remaining = limitsLeft
             bar.week = nil
             bar.five = nil
@@ -3219,6 +3236,11 @@ final class PetController: NSObject, NSMenuDelegate {
         refresh()
     }
 
+    func setLimitBarScale(_ id: String) {
+        d.set(id, forKey: "limitBarScale")
+        refresh()
+    }
+
     func setLimitOutline(_ on: Bool) {
         d.set(on, forKey: "limitOutline")
         refresh()
@@ -3407,6 +3429,12 @@ struct SettingsPane: View {
                     Text("5 ชม. อย่างเดียว").tag("five")
                     Text("สัปดาห์อย่างเดียว").tag("week")
                 }
+                Picker("ขนาดหลอดพลัง", selection: m.bind({ c.limitBarScale }, { c.setLimitBarScale($0) })) {
+                    Text("เล็ก").tag("small")
+                    Text("กลาง").tag("medium")
+                    Text("ใหญ่").tag("large")
+                }
+                .disabled(c.limitStyle == "text")
                 Toggle("ขอบหลอดพลัง", isOn: m.bind({ c.limitOutline }, { c.setLimitOutline($0) }))
                     .disabled(c.limitStyle == "text")
             }
