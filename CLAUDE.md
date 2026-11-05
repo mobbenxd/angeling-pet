@@ -6,9 +6,9 @@ A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session statu
 
 | Path | What |
 |---|---|
-| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, Focus (jump to window), LINE, Discord, Updates, Reminders, usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys, app entry plus debug modes |
+| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, permission prompts, Focus (jump to window), LINE, Discord, Updates, Reminders, usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys (⌥⌘A/⌥⌘R always; ⌥⌘Y/⌥⌘N/⌥⌘1–4 only while a permission request waits), app entry plus debug modes |
 | `hooks/angeling-hook.sh` | Claude Code hook (11 events). Writes `~/.claude/angeling-pet/state/<session>.json`, with a per-session mkdir lock and mktemp+mv writes |
-| `hooks/angeling-permit.sh` | `PermissionRequest` hook (installed as `permit.sh`, timeout 600). Writes `permits/<id>.json`, waits for the app's `permits/<id>.answer` (allow/always/deny); exits at once unless `permits/enabled` exists and Angeling runs. Claude Code's own prompt shows meanwhile and answering it there SIGTERMs the hook |
+| `hooks/angeling-permit.sh` | `PermissionRequest` hook (installed as `permit.sh`, timeout 600). Writes `permits/<id>.json`, waits for the app's `permits/<id>.answer` (allow/always/deny, or a JSON answers object for AskUserQuestion, sent back as `updatedInput.answers`); exits at once unless `permits/enabled` exists and Angeling runs. Claude Code's own prompt shows meanwhile and answering it there SIGTERMs the hook |
 | `install.sh` / `uninstall.sh` | Installer: prebuilt app from a bundle, or builds from source. The Claude hook is optional |
 | `get.sh` | One-line installer: downloads `Angeling.zip` from the latest release and runs its `install.sh` |
 | `scripts/build.sh` | `swiftc` build into an `.app`. Version comes from `ANGELING_VERSION`, then the latest git tag, then `dev` |
@@ -36,7 +36,7 @@ ANGELING_SNAPSHOT=/path/out.png build/Angeling.app/Contents/MacOS/Angeling
 
 Fakes for snapshots are listed in `docs/Development.md`:
 - `ANGELING_EXPANDED`, `ANGELING_LIMITS`, `ANGELING_CODEX_LIMITS`, `ANGELING_AGY_LIMITS`, `ANGELING_LIMIT_MODE`, `ANGELING_LIMIT_PLACE`, `ANGELING_LIMIT_STYLE`, `ANGELING_LIMIT_WINDOWS`, `ANGELING_LIMIT_SIZE`, `ANGELING_LIMIT_OUTLINE`, `ANGELING_HIDE_ACTIVITY`, `ANGELING_HOVER`, `ANGELING_EMOTE`, `ANGELING_FORM`, `ANGELING_SETTINGS`, `ANGELING_MENU`
-- `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_STATE_DIR`, `ANGELING_PERMIT_DIR`, `ANGELING_THEME`
+- `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_STATE_DIR`, `ANGELING_PERMIT_DIR`, `ANGELING_PERMIT_STEP`, `ANGELING_THEME`
 - `ANGELING_CHARACTER`, `ANGELING_ANIM`
 - `ANGELING_FAKE_VERSION`, `ANGELING_LATEST_VERSION`, `ANGELING_UPDATE_NOW`, `ANGELING_UPDATE_CMD`
 
