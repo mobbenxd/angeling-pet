@@ -13,6 +13,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 |---|---|
 | `~/Applications/Angeling.app` | ตัวแอป |
 | `~/.claude/angeling-pet/hook.sh` | hook ที่ Claude Code เรียก |
+| `~/.claude/angeling-pet/permit.sh`, `permits/` | hook `PermissionRequest` ที่รอปุ่มบน Angeling และไฟล์คำขอ / คำตอบ ดู[ตอบคำขออนุญาต](Permission-Buttons.md) |
 | `~/.claude/angeling-pet/state/*.json` | สถานะของแต่ละ session |
 | `~/.claude/angeling-pet/reminders.json` | การเตือนที่ตั้งไว้ |
 | `~/.claude/angeling-pet/spritesheet.webp`, `emotes/`, `sounds/` | ภาพและเสียงเตือน |
@@ -40,6 +41,8 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 - ไม่ให้ `SubagentStop` หรือแจ้งเตือน idle ที่มาทีหลังเปิด session ที่เสร็จแล้วขึ้นมาใหม่
 - `SessionStart` ตอน resume หรือ compact ไม่ล้างสถานะเดิม
 - ใช้เวลาประมาณ 50–80 ms ต่อ event
+
+`permit.sh` เป็น hook แยกสำหรับ `PermissionRequest` อย่างเดียว (timeout 600 วินาที) มันรอให้กดปุ่มบน Angeling ขณะที่กล่องถามของ Claude Code ขึ้นไปพร้อมกัน ตอบฝั่งไหนก่อนฝั่งนั้นชนะ ดู[ตอบคำขออนุญาต](Permission-Buttons.md#หลักการทำงาน)
 
 ## ไฟล์ state
 

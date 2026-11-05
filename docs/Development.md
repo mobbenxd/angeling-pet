@@ -61,6 +61,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_ANIM=failed` | เล่นท่านี้ (`idle`, `running`, `review`, `waiting`, `failed`, `waving`, `jumping`, `running-left`, `running-right`) |
 | `ANGELING_THEME=dark` | ใช้ธีมนี้ (`classic`, `light`, `dark`, `glass`, `tokyo`, `ragnarok`, `auto`) |
 | `ANGELING_STATE_DIR=/path` | อ่านไฟล์ session จำลองจากโฟลเดอร์นี้แทนของจริง |
+| `ANGELING_PERMIT_DIR=/path` | อ่านคำขออนุญาตจำลอง (`<id>.json` แบบใน[ตอบคำขออนุญาต](Permission-Buttons.md#หลักการทำงาน)) ใส่ `"pid": 0` เพื่อข้ามการเช็กว่า hook ยังอยู่ |
 
 ## ทดสอบ hook
 

@@ -11,6 +11,7 @@ APP="$HOME/Applications/Angeling.app"
 SETTINGS="$HOME/.claude/settings.json"
 PLIST="$HOME/Library/LaunchAgents/local.angeling.pet.plist"
 HOOK_CMD="bash $RUNTIME/hook.sh"
+PERMIT_CMD="bash $RUNTIME/permit.sh"
 EVENTS='["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","PostToolUseFailure","Notification","PermissionRequest","Stop","StopFailure","SubagentStop","SessionEnd"]'
 LOGIN=1
 for a in "$@"; do [ "$a" = "--no-login" ] && LOGIN=0; done
@@ -42,10 +43,11 @@ else
 fi
 
 echo "==> Files ($RUNTIME)"
-mkdir -p "$RUNTIME/state" "$RUNTIME/emotes" "$RUNTIME/sounds"
+mkdir -p "$RUNTIME/state" "$RUNTIME/permits" "$RUNTIME/emotes" "$RUNTIME/sounds"
 cp "$ROOT/hooks/angeling-hook.sh" "$RUNTIME/hook.sh"
+cp "$ROOT/hooks/angeling-permit.sh" "$RUNTIME/permit.sh"
 cp "$ROOT/uninstall.sh" "$RUNTIME/uninstall.sh"
-chmod +x "$RUNTIME/hook.sh" "$RUNTIME/uninstall.sh"
+chmod +x "$RUNTIME/hook.sh" "$RUNTIME/permit.sh" "$RUNTIME/uninstall.sh"
 cp "$ROOT/assets/spritesheet.webp" "$RUNTIME/spritesheet.webp"
 cp "$ROOT"/assets/emotes/*.gif "$RUNTIME/emotes/" 2>/dev/null || true
 cp "$ROOT"/assets/sounds/*.mp3 "$RUNTIME/sounds/" 2>/dev/null || true
@@ -71,11 +73,14 @@ if [ -f "$SETTINGS" ] || command -v claude >/dev/null || [ -d "$HOME/.claude/pro
   else
     [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
     cp "$SETTINGS" "$SETTINGS.angeling-backup"
-    "$JQ" --arg cmd "$HOOK_CMD" --argjson events "$EVENTS" '
-      reduce $events[] as $e (.;
-        if ((.hooks[$e] // []) | map(.hooks[]?.command) | index($cmd)) != null then .
-        else .hooks[$e] = ((.hooks[$e] // []) + [{"matcher": "*", "hooks": [{"type": "command", "command": $cmd, "timeout": 5}]}])
-        end)' "$SETTINGS.angeling-backup" > "$SETTINGS.tmp" && "$JQ" -e . "$SETTINGS.tmp" >/dev/null && mv "$SETTINGS.tmp" "$SETTINGS"
+    # The permit hook waits for a click on the pet, so it gets a long timeout; Claude Code's own
+    # prompt shows meanwhile and answering it there stops the hook.
+    "$JQ" --arg cmd "$HOOK_CMD" --arg permit "$PERMIT_CMD" --argjson events "$EVENTS" '
+      def add($e; $c; $t):
+        if ((.hooks[$e] // []) | map(.hooks[]?.command) | index($c)) != null then .
+        else .hooks[$e] = ((.hooks[$e] // []) + [{"matcher": "*", "hooks": [{"type": "command", "command": $c, "timeout": $t}]}])
+        end;
+      reduce $events[] as $e (.; add($e; $cmd; 5)) | add("PermissionRequest"; $permit; 600)' "$SETTINGS.angeling-backup" > "$SETTINGS.tmp" && "$JQ" -e . "$SETTINGS.tmp" >/dev/null && mv "$SETTINGS.tmp" "$SETTINGS"
     echo "    hook added to $SETTINGS (backup: $SETTINGS.angeling-backup)"
     CLAUDE=1
   fi

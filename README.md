@@ -48,6 +48,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 | | [Claude, Codex and AGY usage limits](docs/Usage-Limits.md) | |
 | | [Emotes and animations](docs/Emotes-and-Animations.md) | |
 | | [Use a different pet](docs/Custom-Pet.md) | |
+| | [Answer permission prompts](docs/Permission-Buttons.md) | |
 
 ## ขนาดตัวละคร
 
@@ -70,6 +71,7 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Themes**: Classic (the pink bubble), Minimal light, Minimal dark, Liquid Glass (macOS 26+), Tokyo Night, Ragnarok (a Ragnarok Online window: blue title bar, grey frame, white list, flat rows), or follow macOS light / dark. Pick one in ตั้งค่า… → หน้าตา.
 - **Characters**: swap Angeling for Bee Husky (a chibi husky puppy), Banana Dog (a dog with a banana body), Dino (a cartoon green T-rex), Business Unicorn (a chubby unicorn in a suit) or one of 18 Bomber characters (Thunder, Bomber Cat, Chick Squad, Tommy Shelby and more) from ตั้งค่า… → หน้าตา. Each one walks, waves and blinks when hurt in place of Angeling's animations. See [Use a different pet](docs/Custom-Pet.md).
 - **Ragnarok cursor**: hovering Angeling turns the pointer into the Ragnarok Online cursor, a blue and white arrowhead that spins like the one in the game. In the Ragnarok theme the bubble's rows and button use it too. The cursor is drawn by the app, so it needs no extra artwork.
+- **Answer permission prompts from the pet**: when Claude Code asks to run a command, edit a file or open a page, a red 🔐 row shows what it wants with อนุญาต (allow), ไม่ต้องถามอีก (allow and don't ask again, when Claude Code offers it) and ปฏิเสธ (deny) buttons. Claude Code's own prompt still shows; whichever you answer first wins. Needs the `permit.sh` hook the installer adds; turn it off in ตั้งค่า… → ทั่วไป. See [Permission buttons](docs/Permission-Buttons.md).
 - **Needs you now**: when Claude asks for permission or asks you something, the row turns red with a slow pulse and moves to the top. Angeling gets a red "!" badge and plays a short sound (can be muted).
 - **Choose what the bubble shows**: right-click a row, or open ตั้งค่า… → ทั่วไป, to turn the prompt, the latest message and the task list on or off.
 - **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
