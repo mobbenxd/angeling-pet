@@ -1,0 +1,49 @@
+docs/Activity-Bubble.md
+  s_8414d8b151107f::t_fbb236194c6953 10
+docs/Permission-Buttons.md
+  s_8414d8b151107f::t_ba24fa437bf7e4 1-42
+docs/How-It-Works.md
+  s_8414d8b151107f::t_fbb236194c6953 16,45
+  s_8414d8b151107f::t_2c8b5dfbbaae26 46
+CLAUDE.md
+  s_8414d8b151107f::t_07a958b91bb151 11,22,39
+uninstall.sh
+  s_8414d8b151107f::t_14e07a17e99143 18
+README.md
+  s_8414d8b151107f::t_f73b39c326bdb1 51
+  s_8414d8b151107f::t_fbb236194c6953 74
+install.sh
+  s_8414d8b151107f::t_cf52d45df5138c 14,46,48,50,76-83
+src/main.swift
+  s_8414d8b151107f::t_de1fd06be8bec7 2455-2463,3078-3079,3185-3224,3235,3239,3248-3249
+  s_8414d8b151107f::t_d390058bb17682 1727-1777
+  s_8414d8b151107f::t_dd8a9d1da84f09 315-372
+  s_8414d8b151107f::t_76a48393fa5904 1672-1683
+  s_8414d8b151107f::t_f2a7222148b66c 3524
+  s_8414d8b151107f::t_4aed6ca7e0f5f7 3583-3587
+  s_8414d8b151107f::t_d7642e1787b612 2248-2254,2345,2870
+  s_8414d8b151107f::t_ed88d7fe63b511 1652-1653,1661-1662
+  s_8414d8b151107f::t_69153ad1548e32 2868-2869
+docs/Development.md
+  s_8414d8b151107f::t_fbb236194c6953 64
+docs/README.md
+  s_8414d8b151107f::t_fbb236194c6953 9,33
+hooks/angeling-permit.sh
+  s_8414d8b151107f::t_5f570d74176071 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c5233a1469643dba344ee92ced334d46b691bb28",
+  "prompts": {},
+  "sessions": {
+    "s_8414d8b151107f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e01aa6b7-89fd-4157-aab4-33cbaffe9c8e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
