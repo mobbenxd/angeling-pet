@@ -1,0 +1,40 @@
+docs/Development.md
+  s_8414d8b151107f::t_bf12664cabcdad 65
+README.md
+  s_8414d8b151107f::t_bf12664cabcdad 74
+docs/Permission-Buttons.md
+  s_8414d8b151107f::t_9d6f487b3cd559 13-21,25-26,29-34,36,38,61-62
+  s_8414d8b151107f::t_bf12664cabcdad 22-24,27-28,35,37
+src/main.swift
+  s_8414d8b151107f::t_44d5fa2a1c1274 2322-2323,2534-2541,2543,2545-2548,2550-2571,2583,2595,2597,3024-3031,3240,3397-3398,3400-3407,3409-3436,3438-3439
+  s_8414d8b151107f::t_b8ab2f6da1b2ab 335-346,374-415,4097
+  s_8414d8b151107f::t_6eb58c32e96643 1731-1734,1736-1742,1792-1794,1824-1826,1829-1832
+  s_8414d8b151107f::t_1715bf4b9aab07 3383-3384
+  s_8414d8b151107f::t_30249d1492ec76 2321,2324,2542,2544,2549,2572-2582,2584-2594,2596,2598-2615,3023,3032,3348-3379,3381-3382,3385-3396,3399,3408,3437,3440-3442,3446,3448-3449,3461,3463,4084-4096
+  s_8414d8b151107f::t_63cf860f3f9bc2 416,4098
+hooks/angeling-permit.sh
+  s_8414d8b151107f::t_766d7aa102ec49 8-9,30,39-40,53-67,76-83
+CLAUDE.md
+  s_8414d8b151107f::t_bf12664cabcdad 39
+  s_8414d8b151107f::t_9d6f487b3cd559 9,11
+docs/README.md
+  s_8414d8b151107f::t_9d6f487b3cd559 9,33
+docs/Usage.md
+  s_8414d8b151107f::t_680de28898270f 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b4b39116b5849ac6700a00ed0d0a4b81ab61b6c",
+  "prompts": {},
+  "sessions": {
+    "s_8414d8b151107f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e01aa6b7-89fd-4157-aab4-33cbaffe9c8e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
