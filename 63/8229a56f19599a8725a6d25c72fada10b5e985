@@ -1,0 +1,23 @@
+src/main.swift
+  s_87a08a4c3d73d7::t_8fd927219d72b4 667-668,673-691
+README.md
+  s_87a08a4c3d73d7::t_fcb6da823864a2 150
+docs/How-It-Works.md
+  s_87a08a4c3d73d7::t_323ebaed2544d6 78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "638229a56f19599a8725a6d25c72fada10b5e985",
+  "prompts": {},
+  "sessions": {
+    "s_87a08a4c3d73d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc762995-7601-4601-85c6-ef0c4d53ffdd",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
