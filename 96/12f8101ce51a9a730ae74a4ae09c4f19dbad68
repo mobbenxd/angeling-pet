@@ -1,0 +1,29 @@
+CLAUDE.md
+  s_7a7c13818e52a8::t_d720c97c5f16c9 16,57
+README.md
+  s_7a7c13818e52a8::t_3f7466cc837dc6 71,162
+docs/Custom-Pet.md
+  s_7a7c13818e52a8::t_b832d5f67fb587 5
+docs/Development.md
+  s_7a7c13818e52a8::t_614eec62f64d35 109-114
+docs/How-It-Works.md
+  s_7a7c13818e52a8::t_bf49b62418ecaa 20
+docs/Installation.md
+  s_7a7c13818e52a8::t_58f2c93946b543 81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9612f8101ce51a9a730ae74a4ae09c4f19dbad68",
+  "prompts": {},
+  "sessions": {
+    "s_7a7c13818e52a8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01af5ce1-0a93-450a-b659-5b749d753b1a",
+        "model": "unknown"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
