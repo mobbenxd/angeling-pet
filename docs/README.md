@@ -6,6 +6,7 @@
 - **บอกจำนวนข้อความ Discord** ที่ยังไม่อ่าน (DM และ @mention)
 - **บอก limit การใช้งาน Claude, Codex และ AGY** รายสัปดาห์และ 5 ชั่วโมง (เปิดใน ตั้งค่า…)
 - **รายงานงานของ Claude Code** ว่าแต่ละ session กำลังทำอะไร อันไหนรอคุณ อันไหนเสร็จแล้ว คลิกเพื่อไปที่ session นั้นได้ (ไม่มี Claude Code ก็ใช้ฟีเจอร์อื่นได้)
+- **กดอนุญาต / ปฏิเสธคำขอของ Claude Code** จากบับเบิลได้เลย ไม่ต้องสลับไป terminal
 
 ติดตั้งด้วยคำสั่งเดียว (วางใน Terminal):
 
@@ -29,6 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/mobbenxd/angeling-pet/main/get.sh |
 |---|---|
 | [วิธีใช้งาน](Usage.md) | คลิก ลาก ซ่อน เมนู ตั้งค่า และคีย์ลัด |
 | [บับเบิลกิจกรรมและสถานะ](Activity-Bubble.md) | อยากรู้ว่าแต่ละแถว สี และไอคอนหมายถึงอะไร |
+| [ตอบคำขออนุญาตของ Claude Code](Permission-Buttons.md) | อยากกด อนุญาต / ปฏิเสธ จาก Angeling โดยไม่ต้องสลับหน้าต่าง |
 | [ตั้งเตือน](Reminders.md) | อยากให้ Angeling เตือนนัดหรืองาน พร้อมบันทึกลงปฏิทิน |
 | [แจ้งเตือน Discord](Discord-Notifications.md) | อยากรู้ว่ามี DM ใน Discord ที่ยังไม่อ่านกี่ข้อความ |
 | [แจ้งเตือน LINE](LINE-Notifications.md) | อยากให้แสดงข้อความ LINE ที่ยังไม่อ่าน |

@@ -15,7 +15,7 @@ if [ -f "$SETTINGS" ] && command -v jq >/dev/null; then
   cp "$SETTINGS" "$SETTINGS.angeling-backup"
   jq '
     if .hooks then
-      .hooks |= (with_entries(.value |= map(select(([.hooks[]?.command] | map(tostring | contains("angeling-pet/hook.sh")) | any) | not)))
+      .hooks |= (with_entries(.value |= map(select(([.hooks[]?.command] | map(tostring | test("angeling-pet/(hook|permit)\\.sh")) | any) | not)))
                  | with_entries(select(.value | length > 0)))
     else . end' "$SETTINGS.angeling-backup" > "$SETTINGS.tmp" && jq -e . "$SETTINGS.tmp" >/dev/null && mv "$SETTINGS.tmp" "$SETTINGS"
   echo "Removed hooks from $SETTINGS (backup: $SETTINGS.angeling-backup)"

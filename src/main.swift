@@ -312,6 +312,64 @@ let alertRed = NSColor(calibratedRed: 0.86, green: 0.15, blue: 0.2, alpha: 1)
 let discordBlurple = NSColor(calibratedRed: 0.35, green: 0.4, blue: 0.95, alpha: 1)
 let lineGreen = NSColor(calibratedRed: 0.02, green: 0.66, blue: 0.3, alpha: 1)
 
+// MARK: - Permission prompts (answered from the pet)
+//   hooks/angeling-permit.sh writes permits/<id>.json and waits for permits/<id>.answer.
+//   Claude Code's own prompt shows at the same time; whichever is answered first wins, and
+//   answering in the terminal stops the hook, which deletes its request.
+
+// Debug: ANGELING_PERMIT_DIR points snapshots at fake requests (pid 0 skips the liveness check).
+let permitDir = ProcessInfo.processInfo.environment["ANGELING_PERMIT_DIR"].map { URL(fileURLWithPath: $0) }
+    ?? baseDir.appendingPathComponent("permits")
+
+struct PermitRequest: Decodable {
+    let id: String
+    let pid: Int32
+    let created: Double
+    let session: String?
+    let project: String?
+    let tool: String?
+    let title: String?
+    let detail: String?
+    let note: String?
+    let canAlways: Bool?
+}
+
+/// Pending requests, oldest first. Requests whose hook is gone (killed without its trap) are deleted.
+func loadPermits() -> [PermitRequest] {
+    let fm = FileManager.default
+    guard let files = try? fm.contentsOfDirectory(at: permitDir, includingPropertiesForKeys: nil) else { return [] }
+    let now = Date().timeIntervalSince1970
+    var out: [PermitRequest] = []
+    for f in files where f.pathExtension == "json" {
+        guard let data = try? Data(contentsOf: f), let p = try? JSONDecoder().decode(PermitRequest.self, from: data) else { continue }
+        let dead = p.pid > 0 && kill(p.pid, 0) != 0 && errno == ESRCH
+        // The hook's timeout is 10 minutes; anything older lost its hook.
+        if dead || now - p.created > 900 {
+            try? fm.removeItem(at: f)
+            try? fm.removeItem(at: permitDir.appendingPathComponent("\(p.id).answer"))
+            continue
+        }
+        out.append(p)
+    }
+    return out.sorted { $0.created < $1.created }
+}
+
+/// `answer` is allow, always or deny.
+func answerPermit(_ p: PermitRequest, _ answer: String) {
+    try? answer.write(to: permitDir.appendingPathComponent("\(p.id).answer"), atomically: true, encoding: .utf8)
+}
+
+/// The hook waits only while this file exists, so turning the buttons off costs Claude Code nothing.
+func syncPermitFlag(_ on: Bool) {
+    let f = permitDir.appendingPathComponent("enabled")
+    if on {
+        try? FileManager.default.createDirectory(at: permitDir, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: f.path) { FileManager.default.createFile(atPath: f.path, contents: nil) }
+    } else {
+        try? FileManager.default.removeItem(at: f)
+    }
+}
+
 // MARK: - Themes
 //   Classic is the original pink bubble. The minimal themes drop emoji and framed rows: a coloured
 //   dot marks each row's state, the status sits on the right, and only rows that need you are tinted.
@@ -1591,7 +1649,8 @@ final class RowView: NSView {
     }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncPulse() }
 
-    init(text: NSAttributedString, width: CGFloat, clickable: Bool) {
+    /// `footer` reserves room under the text for buttons (see `addButtons`).
+    init(text: NSAttributedString, width: CGFloat, clickable: Bool, footer: CGFloat = 0) {
         super.init(frame: .zero)
         label.attributedStringValue = text
         label.isSelectable = false
@@ -1599,8 +1658,8 @@ final class RowView: NSView {
         label.isBezeled = false
         label.preferredMaxLayoutWidth = width - 16
         let h = ceil(label.fittingSize.height)
-        frame = NSRect(x: 0, y: 0, width: width, height: h + 10)
-        label.frame = NSRect(x: 8, y: 5, width: width - 16, height: h)
+        frame = NSRect(x: 0, y: 0, width: width, height: h + 10 + footer)
+        label.frame = NSRect(x: 8, y: 5 + footer, width: width - 16, height: h)
         addSubview(label)
         if clickable {
             addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
@@ -1610,7 +1669,18 @@ final class RowView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        frame.contains(point) && (onClick != nil || onRightClick != nil) ? self : super.hitTest(point)
+        if let hit = super.hitTest(point), hit is PillButton { return hit }
+        return frame.contains(point) && (onClick != nil || onRightClick != nil) ? self : super.hitTest(point)
+    }
+
+    /// Lays buttons out in a row along the bottom, sharing the width.
+    func addButtons(_ buttons: [PillButton], height: CGFloat = 24) {
+        let gap: CGFloat = 6, inset: CGFloat = 8
+        let w = (bounds.width - inset * 2 - gap * CGFloat(buttons.count - 1)) / CGFloat(buttons.count)
+        for (i, b) in buttons.enumerated() {
+            b.frame = NSRect(x: inset + CGFloat(i) * (w + gap), y: 6, width: w, height: height)
+            addSubview(b)
+        }
     }
     override func draw(_ dirtyRect: NSRect) {
         if let a = accent {
@@ -1652,6 +1722,57 @@ final class RowView: NSView {
         if bounds.contains(convert(e.locationInWindow, from: nil)) { onClick?() }
     }
     override func rightMouseDown(with e: NSEvent) { onRightClick?(e) }
+}
+
+/// A small rounded button for rows in the bubble. The panel never becomes key, so this
+/// takes the first click itself instead of relying on NSButton.
+final class PillButton: NSView {
+    let title: String
+    let color: NSColor
+    let filled: Bool
+    var onClick: (() -> Void)?
+    private var hovering = false { didSet { needsDisplay = true } }
+    private var pressed = false { didSet { needsDisplay = true } }
+    private var roCursor = false
+
+    init(_ title: String, color: NSColor, filled: Bool) {
+        self.title = title
+        self.color = color
+        self.filled = filled
+        super.init(frame: .zero)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = bounds.insetBy(dx: 0.75, dy: 0.75)
+        let radius = theme.ragnarok ? 3 : r.height / 2
+        let path = NSBezierPath(roundedRect: r, xRadius: radius, yRadius: radius)
+        let boost: CGFloat = pressed ? 0.25 : hovering ? 0.12 : 0
+        if filled {
+            color.blended(withFraction: boost, of: .black)?.setFill()
+            path.fill()
+        } else {
+            color.withAlphaComponent(0.12 + boost).setFill()
+            path.fill()
+            color.setStroke()
+            path.lineWidth = 1.2
+            path.stroke()
+        }
+        let text = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 11.5, weight: .semibold),
+            .foregroundColor: filled ? NSColor.white : color])
+        let sz = text.size()
+        text.draw(at: NSPoint(x: (bounds.width - sz.width) / 2, y: (bounds.height - sz.height) / 2))
+    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseEntered(with e: NSEvent) { hovering = true; roCursor = pointerEntered() }
+    override func mouseExited(with e: NSEvent) { hovering = false; pointerExited(roCursor) }
+    override func mouseDown(with e: NSEvent) { pressed = true }
+    override func mouseUp(with e: NSEvent) {
+        pressed = false
+        if bounds.contains(convert(e.locationInWindow, from: nil)) { onClick?() }
+    }
 }
 
 // Swift 6.2 ships with the macOS 26 SDK; source builds on older tools keep the plain fallback.
@@ -2124,6 +2245,13 @@ final class PetController: NSObject, NSMenuDelegate {
     var petHidden: Bool { get { d.bool(forKey: "petHidden") } set { d.set(newValue, forKey: "petHidden") } }
     var popWhenWaiting: Bool { get { d.object(forKey: "popWhenWaiting") as? Bool ?? true } set { d.set(newValue, forKey: "popWhenWaiting") } }
     var waitSound: Bool { flag("waitSound") }
+    /// Allow / deny buttons for Claude Code's permission prompts (needs the permit hook).
+    var permitButtons: Bool {
+        get { flag("permitButtons") }
+        set { d.set(newValue, forKey: "permitButtons"); syncPermitFlag(newValue); refresh() }
+    }
+    var permits: [PermitRequest] = []
+    var answeredPermits: Set<String> = []   // answered here; hidden until the hook removes the file
     var themeChoice: String { ProcessInfo.processInfo.environment["ANGELING_THEME"] ?? d.string(forKey: "theme") ?? "classic" }
     static var characterChoice: String {
         ProcessInfo.processInfo.environment["ANGELING_CHARACTER"] ?? UserDefaults.standard.string(forKey: "character") ?? "angeling"
@@ -2214,6 +2342,7 @@ final class PetController: NSObject, NSMenuDelegate {
         statusItem.menu = m
 
         if !petHidden { panel.orderFrontRegardless() }
+        if ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil { syncPermitFlag(permitButtons) }
         play("idle")
         refresh()
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
@@ -2321,6 +2450,15 @@ final class PetController: NSObject, NSMenuDelegate {
             NSMenu.popUpContextMenu(m, with: e, for: r)
         }
         return r
+    }
+
+    // MARK: permission prompts
+
+    func answer(_ p: PermitRequest, _ a: String) {
+        answerPermit(p, a)
+        answeredPermits.insert(p.id)
+        if a == "deny" { showEmote("swt", for: 2.5) } else { setOverride("jumping", for: 1.0); showEmote("heh", for: 2.5) }
+        refresh()
     }
 
     // MARK: reminders
@@ -2727,6 +2865,9 @@ final class PetController: NSObject, NSMenuDelegate {
             .sorted { a, b in
                 priority(a.1) != priority(b.1) ? priority(a.1) > priority(b.1) : (a.0.updated ?? 0) > (b.0.updated ?? 0)
             }
+        // Forget answers once the hook has picked them up and removed its request.
+        answeredPermits = answeredPermits.filter { FileManager.default.fileExists(atPath: permitDir.appendingPathComponent("\($0).json").path) }
+        permits = permitButtons ? loadPermits().filter { !answeredPermits.contains($0.id) } : []
         let live = visibleSessions()
         let primary = live.first
         checkReminders(now)
@@ -2934,7 +3075,8 @@ final class PetController: NSObject, NSMenuDelegate {
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
         let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)" }.joined()
-        return "\(expanded)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
+        let permitSig = permits.map(\.id).joined(separator: ",")
+        return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -3040,6 +3182,46 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             return r
         }
+        // A permission prompt with its answer buttons. It replaces its session's row.
+        func permitRow(_ p: PermitRequest) -> RowView {
+            let session = sessions.first { $0.0.session == p.session }?.0
+            let t = rowHeader(icon: "🔐", title: p.project ?? session?.project ?? "Claude Code", titleColor: theme.project, dot: theme.alert,
+                              status: "ขออนุญาต", statusColor: theme.alert, statusBold: true, width: w)
+            let what = [p.title ?? p.tool ?? "", p.note ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
+            if !what.isEmpty { t.append(rowLine(what, size: 11, color: theme.secondary)) }
+            if let detail = p.detail, !detail.isEmpty {
+                var a: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: theme.text]
+                if theme.minimal {
+                    let para = NSMutableParagraphStyle()
+                    para.firstLineHeadIndent = dotIndent
+                    para.headIndent = dotIndent
+                    a[.paragraphStyle] = para
+                }
+                t.append(NSAttributedString(string: "\n" + detail, attributes: a))
+            }
+            let r = RowView(text: t, width: w, clickable: true, footer: 30)
+            r.accent = theme.alert
+            r.pulse = true
+            r.toolTip = "ตอบได้ทั้งที่นี่และใน Claude Code · คลิกที่ข้อความเพื่อไปที่ session นี้"
+            if let session { r.onClick = { [weak self] in self?.openSession(session) } }
+            var buttons = [PillButton("อนุญาต", color: theme.done, filled: true)]
+            buttons[0].onClick = { [weak self] in self?.answer(p, "allow") }
+            if p.canAlways == true {
+                let always = PillButton("ไม่ต้องถามอีก", color: theme.done, filled: false)
+                always.onClick = { [weak self] in self?.answer(p, "always") }
+                always.toolTip = "อนุญาต และจำไว้ตามที่ Claude Code เสนอ (ไม่ถามคำสั่งแบบนี้อีก)"
+                buttons.append(always)
+            }
+            let deny = PillButton("ปฏิเสธ", color: theme.alert, filled: false)
+            deny.onClick = { [weak self] in self?.answer(p, "deny") }
+            buttons.append(deny)
+            r.addButtons(buttons)
+            return r
+        }
+        let permitRows = permits.map(permitRow)
+        let asking = Set(permits.compactMap(\.session))
+        let live = live.filter { !asking.contains($0.0.session ?? "") }
+
         // The top rows: the limits, when shown, one row per provider.
         func withHeader(_ rows: [RowView]) -> [RowView] {
             let header = limitProviders.compactMap { p in limitText(p).map { headerRow($0, p, width: w) } }
@@ -3050,11 +3232,11 @@ final class PetController: NSObject, NSMenuDelegate {
 
         limitInBubble = false
         let waiting = live.filter { $0.1 == "waiting" }
-        if urgentOnly { return waiting.map { sessionRow($0.0, $0.1, detailed: false) } }
+        if urgentOnly { return permitRows + waiting.map { sessionRow($0.0, $0.1, detailed: false) } }
 
         if expanded {
             // Sessions that need you go above everything else, every one of them.
-            var rows = waiting.map { sessionRow($0.0, $0.1, detailed: true) }
+            var rows = permitRows + waiting.map { sessionRow($0.0, $0.1, detailed: true) }
                 + reminderRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
                 + live.filter { $0.1 != "waiting" }.map { sessionRow($0.0, $0.1, detailed: true) }
             if rows.isEmpty { rows = [RowView(text: NSAttributedString(string: "ยังไม่มีงานที่กำลังทำ~", attributes: normal), width: w, clickable: false)] }
@@ -3063,7 +3245,8 @@ final class PetController: NSObject, NSMenuDelegate {
 
         // Collapsed: the two rows that matter most (title and latest message), the rest counted in one line.
         // LINE and Discord show as badges on the pet instead.
-        var ranked: [(row: RowView, waiting: Bool)] = waiting.map { (sessionRow($0.0, $0.1, detailed: false), true) }
+        var ranked: [(row: RowView, waiting: Bool)] = permitRows.map { ($0, true) }
+        ranked += waiting.map { (sessionRow($0.0, $0.1, detailed: false), true) }
         ranked += live.filter { $0.1 == "failed" }.map { (sessionRow($0.0, $0.1, detailed: false), false) }
         ranked += reminderRows(width: w).map { ($0, false) }
         if updateAvailable { ranked.append((updateRow(width: w), false)) }
@@ -3338,7 +3521,7 @@ enum SettingsTab: String, CaseIterable {
     }
     var height: CGFloat {
         switch self {
-        case .general: return 360
+        case .general: return 450
         case .look: return 560
         case .alerts: return 280
         case .limits: return 720
@@ -3396,6 +3579,11 @@ struct SettingsPane: View {
                 Toggle("เสียงเตือนเมื่อมีงานที่ต้องดู", isOn: m.flag("waitSound"))
             } footer: {
                 Text("ซ่อนกิจกรรมแล้ว บับเบิลจะขึ้นเฉพาะงานที่ต้องดูและการเตือนที่กำลังดัง").font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("ตอบคำขออนุญาตของ Claude Code จาก Angeling", isOn: m.bind({ c.permitButtons }, { c.permitButtons = $0 }))
+            } footer: {
+                Text("ปุ่ม อนุญาต / ปฏิเสธ ขึ้นในบับเบิลพร้อมกับที่ Claude Code ถาม ตอบที่ไหนก่อนก็ได้").font(.caption).foregroundStyle(.secondary)
             }
             Section("แสดงในบับเบิล") {
                 Toggle("งานที่สั่ง (prompt)", isOn: m.flag("showTask"))
