@@ -1,0 +1,40 @@
+docs/Development.md
+  s_ce432fd9e018f0::t_3c34df6cf1de35 40,58
+docs/Activity-Bubble.md
+  s_ce432fd9e018f0::t_3c34df6cf1de35 53-55,73
+docs/README.md
+  s_ce432fd9e018f0::t_3c34df6cf1de35 7,35
+docs/Usage-Limits.md
+  s_ce432fd9e018f0::t_3c34df6cf1de35 1,3,7-9,13-15,24,26,34-36,46,58,62,85-101
+  s_ce432fd9e018f0::t_abf07b3fd030e6 102
+README.md
+  s_ce432fd9e018f0::t_0634bbe4af0d01 57
+  s_ce432fd9e018f0::t_3c34df6cf1de35 48,56,145-146
+src/main.swift
+  s_ce432fd9e018f0::t_0634bbe4af0d01 2826
+  s_ce432fd9e018f0::t_3c34df6cf1de35 17,906,995,1004-1013,1015,1019-1023,1101-1105,1108-1112,1193-1451,2044,2046-2051,2145-2148,2569-2572,2630-2631,2815-2825,2827-2831,2833-2835,2837-2839,2841-2842,2844-2846,2865-2870,2893-2894,3000-3005,3018,3043,3048-3049,3051,3054-3064,3071-3084,3090-3092,3109-3113,3117,3120-3122,3124-3126,3135-3136,3138-3149,3161-3163,3165-3194,3196-3203,3225-3233,3283,3301,3397-3409,3441,3466-3473,3615-3648,3666-3668
+CLAUDE.md
+  s_ce432fd9e018f0::t_3c34df6cf1de35 9,21
+  s_ce432fd9e018f0::t_0634bbe4af0d01 37
+docs/Usage.md
+  s_ce432fd9e018f0::t_3c34df6cf1de35 12,16,65
+  s_ce432fd9e018f0::t_0634bbe4af0d01 76
+uninstall.sh
+  s_ce432fd9e018f0::t_3c34df6cf1de35 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.3",
+  "base_commit_sha": "a2c866294f5fcffc7c5a8db783d4a407eb23b524",
+  "prompts": {},
+  "sessions": {
+    "s_ce432fd9e018f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c90dc4aa-59cf-4586-8f34-76bcf2e89ed4",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "vasit <k.chaipaphat@gmail.com>"
+    }
+  }
+}
