@@ -75,7 +75,7 @@ LINE (Dock badge + Notification Center) ── ทุก 3 วินาที �
 
 ## การอัปเดต
 
-- ตอนเปิดแอปและทุก 6 ชั่วโมง เรียก `https://api.github.com/repos/mobbenxd/angeling-pet/releases/latest` แล้วเทียบ `tag_name` กับเวอร์ชันของแอป (build จากซอร์สใช้ git tag ล่าสุด, ถ้าไม่มีจะเป็น `dev` ซึ่งไม่เตือน)
+- ตอนเปิดแอปและทุก 6 ชั่วโมง ดูว่า `https://github.com/mobbenxd/angeling-pet/releases/latest` พาไปที่ tag ไหน (ไม่ติดโควตา 60 ครั้งต่อชั่วโมงของ GitHub API) ถ้าไม่ได้จึงถาม `https://api.github.com/repos/mobbenxd/angeling-pet/releases/latest` แล้วเทียบเลขเวอร์ชันกับของแอป (build จากซอร์สใช้ git tag ล่าสุด, ถ้าไม่มีจะเป็น `dev` ซึ่งไม่เตือน)
 - อัปเดตโดยรัน `get.sh` เบื้องหลัง เก็บ log ที่ `~/.claude/angeling-pet/update.log` ตัวติดตั้งจะปิดแอปตัวเก่าแล้วเปิดตัวใหม่
 
 ## LINE

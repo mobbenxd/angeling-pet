@@ -664,18 +664,31 @@ enum Updater {
     }
 
     /// Latest release version (without the "v") and its page; nil on any failure.
+    /// Reads where github.com/<repo>/releases/latest redirects (…/releases/tag/vX.Y.Z), which isn't
+    /// subject to the REST API's 60-requests-per-hour limit per IP; falls back to the API.
     static func fetchLatest(_ done: @escaping (String?, URL?) -> Void) {
         if let fake = ProcessInfo.processInfo.environment["ANGELING_LATEST_VERSION"] {
             return done(fake, URL(string: "https://github.com/\(repo)/releases"))
         }
-        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!, timeoutInterval: 15)
-        req.setValue("Angeling/\(current)", forHTTPHeaderField: "User-Agent")
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        URLSession.shared.dataTask(with: req) { data, _, _ in
-            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-            let tag = (json?["tag_name"] as? String).map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
-            let page = (json?["html_url"] as? String).flatMap(URL.init(string:))
-            DispatchQueue.main.async { done(tag, page) }
+        func version(_ tag: String) -> String { tag.hasPrefix("v") ? String(tag.dropFirst()) : tag }
+        var head = URLRequest(url: URL(string: "https://github.com/\(repo)/releases/latest")!, timeoutInterval: 15)
+        head.httpMethod = "HEAD"
+        head.setValue("Angeling/\(current)", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: head) { _, resp, _ in
+            if let http = resp as? HTTPURLResponse, http.statusCode == 200, let url = http.url,
+               url.pathComponents.dropLast().last == "tag" {
+                let tag = url.lastPathComponent
+                return DispatchQueue.main.async { done(version(tag), url) }
+            }
+            var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!, timeoutInterval: 15)
+            req.setValue("Angeling/\(current)", forHTTPHeaderField: "User-Agent")
+            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            URLSession.shared.dataTask(with: req) { data, _, _ in
+                let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                let tag = (json?["tag_name"] as? String).map(version)
+                let page = (json?["html_url"] as? String).flatMap(URL.init(string:))
+                DispatchQueue.main.async { done(tag, page) }
+            }.resume()
         }.resume()
     }
 
