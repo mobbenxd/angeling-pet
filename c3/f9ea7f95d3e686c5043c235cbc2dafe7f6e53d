@@ -1,0 +1,19 @@
+scripts/package.sh
+  s_8414d8b151107f::t_642963c34b3829 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3f9ea7f95d3e686c5043c235cbc2dafe7f6e53d",
+  "prompts": {},
+  "sessions": {
+    "s_8414d8b151107f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e01aa6b7-89fd-4157-aab4-33cbaffe9c8e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
