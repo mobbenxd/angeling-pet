@@ -106,12 +106,6 @@ swift scripts/import-pet.swift ~/Downloads/banana-dog.webp banana-dog "Banana Do
 swift scripts/import-pet.swift ~/Downloads/dino.webp dino "Dino" "A cute cartoon green T-rex with a cream belly and a big toothy grin."
 ```
 
-```bash
-swift scripts/import-pet.swift ~/Downloads/unicorn-sheet-fixed.png business-unicorn "Business Unicorn" "A chubby chibi unicorn with a rainbow mane in a navy business suit."
-```
-
-ไฟล์ `unicorn-sheet-fixed.png` คือชีตที่ AI วาดมาแล้วแก้ให้ตรงตาราง: เติมแถว running ที่ขาดด้วยท่ากระโดด ตัดเฟรมที่เกิน และกลับด้านแถวเดินขวา
-
 ทุก Release ต้องแนบไฟล์ครบทุกตัว เพราะ `get.sh` และ `fetch-assets.sh` ดึงจาก `releases/latest`
 
 ทดสอบตัวติดตั้งกับไฟล์ในเครื่อง โดยไม่ยุ่งกับการติดตั้งจริง:
