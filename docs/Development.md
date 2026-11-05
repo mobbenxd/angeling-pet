@@ -62,6 +62,7 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_THEME=dark` | ใช้ธีมนี้ (`classic`, `light`, `dark`, `glass`, `tokyo`, `ragnarok`, `auto`) |
 | `ANGELING_STATE_DIR=/path` | อ่านไฟล์ session จำลองจากโฟลเดอร์นี้แทนของจริง |
 | `ANGELING_PERMIT_DIR=/path` | อ่านคำขออนุญาตจำลอง (`<id>.json` แบบใน[ตอบคำขออนุญาต](Permission-Buttons.md#หลักการทำงาน)) ใส่ `"pid": 0` เพื่อข้ามการเช็กว่า hook ยังอยู่ |
+| `ANGELING_PERMIT_STEP=2` | ให้คำถามจำลองอยู่ที่ข้อนี้ (นับจาก 0; เท่ากับจำนวนข้อคือหน้าสรุป) ข้อก่อนหน้าตอบตัวเลือกแรกไว้ |
 
 ## ทดสอบ hook
 

@@ -5,7 +5,8 @@
 # Protocol, in ~/.claude/angeling-pet/permits/:
 #   enabled        exists while the pet's buttons are on (the app keeps it in sync)
 #   <id>.json      the request, written here; the app shows it with buttons
-#   <id>.answer    written by the app: allow | always | deny
+#   <id>.answer    written by the app: allow | always | deny, or for AskUserQuestion a JSON
+#                  object mapping each question to the chosen label(s)
 DIR="$HOME/.claude/angeling-pet/permits"
 INPUT=$(cat)
 # Nothing to wait for unless the pet is running with its buttons on.
@@ -26,6 +27,7 @@ TMP=$(mktemp "$DIR/.tmp.XXXXXX") || exit 0
 echo "$INPUT" | $JQ -c --arg id "$ID" --argjson pid $$ --arg now "$(date +%s)" '
   def short(n): tostring | gsub("[\\r\\t]+"; " ") | if length > n then .[0:n] + "…" else . end;
   def base: tostring | split("/") | last;
+  def cap: if . == null then null else tostring | if length > 6000 then .[0:6000] else . end end;
   (.tool_input // {}) as $i
   | {
       id: $id,
@@ -34,7 +36,8 @@ echo "$INPUT" | $JQ -c --arg id "$ID" --argjson pid $$ --arg now "$(date +%s)" '
       session: .session_id,
       project: ((.cwd // "") | base),
       tool: (.tool_name // "" | sub("^mcp__[^_]+__"; "")),
-      title: (if .tool_name == "Bash" then "รันคำสั่ง"
+      title: (if .tool_name == "AskUserQuestion" then "ถามคุณ"
+              elif .tool_name == "Bash" then "รันคำสั่ง"
               elif (.tool_name // "" | test("^(Edit|MultiEdit|NotebookEdit)$")) then "แก้ไฟล์"
               elif .tool_name == "Write" then "เขียนไฟล์"
               elif (.tool_name // "" | test("^(WebFetch|WebSearch)$")) then "เข้าเว็บ"
@@ -47,7 +50,21 @@ echo "$INPUT" | $JQ -c --arg id "$ID" --argjson pid $$ --arg now "$(date +%s)" '
                elif $i.pattern != null then $i.pattern
                else ($i | tostring) end | short(240)),
       note: ($i.description // "" | short(80)),
-      canAlways: ((.permission_suggestions // []) | length > 0)
+      canAlways: ((.permission_suggestions // []) | length > 0),
+      questions: (if .tool_name == "AskUserQuestion" then [($i.questions // [])[]
+                    | {question, header, multiSelect: (.multiSelect // false),
+                       options: [(.options // [])[] | {label, description}]}] else null end),
+      # For the diff preview: the text an edit replaces and the text it puts in. Write leaves
+      # "old" out, and the app reads the current file instead.
+      path: ($i.file_path // $i.notebook_path),
+      old: (if .tool_name == "Edit" then $i.old_string
+            elif .tool_name == "MultiEdit" then ([($i.edits // [])[] | .old_string] | join("\n"))
+            else null end | cap),
+      new: (if .tool_name == "Edit" then $i.new_string
+            elif .tool_name == "MultiEdit" then ([($i.edits // [])[] | .new_string] | join("\n"))
+            elif .tool_name == "Write" then $i.content
+            elif .tool_name == "NotebookEdit" then $i.new_source
+            else null end | cap)
     }' > "$TMP" 2>/dev/null && mv "$TMP" "$REQ" || { rm -f "$TMP"; exit 0; }
 
 # Wait for the pet. Claude Code stops this hook when its timeout passes or the prompt is answered.
@@ -56,7 +73,14 @@ while [ ! -s "$ANS" ]; do
   sleep 0.25
 done
 
-case "$(tr -d '[:space:]' < "$ANS")" in
+ANSWER=$(cat "$ANS")
+if [ "${ANSWER:0:1}" = "{" ]; then
+  # AskUserQuestion: Claude Code takes the answers inside the tool's own input.
+  echo "$INPUT" | $JQ -c --argjson answers "$ANSWER" '{hookSpecificOutput: {hookEventName: "PermissionRequest",
+    decision: {behavior: "allow", updatedInput: ((.tool_input // {}) + {answers: $answers})}}}'
+  exit 0
+fi
+case "$(echo "$ANSWER" | tr -d '[:space:]')" in
   allow)
     echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}' ;;
   always)

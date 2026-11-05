@@ -332,6 +332,18 @@ struct PermitRequest: Decodable {
     let detail: String?
     let note: String?
     let canAlways: Bool?
+    let questions: [PermitQuestion]?   // AskUserQuestion
+    let path: String?                  // file an edit touches
+    let old: String?                   // text the edit replaces (nil for Write: read the file)
+    let new: String?                   // text the edit puts in
+}
+
+struct PermitQuestion: Decodable {
+    struct Option: Decodable { let label: String; let description: String? }
+    let question: String
+    let header: String?
+    let multiSelect: Bool?
+    let options: [Option]
 }
 
 /// Pending requests, oldest first. Requests whose hook is gone (killed without its trap) are deleted.
@@ -357,6 +369,49 @@ func loadPermits() -> [PermitRequest] {
 /// `answer` is allow, always or deny.
 func answerPermit(_ p: PermitRequest, _ answer: String) {
     try? answer.write(to: permitDir.appendingPathComponent("\(p.id).answer"), atomically: true, encoding: .utf8)
+}
+
+/// AskUserQuestion: question text -> chosen label(s), several joined with ", " as Claude Code does.
+func answerQuestions(_ p: PermitRequest, _ answers: [String: String]) {
+    guard let data = try? JSONSerialization.data(withJSONObject: answers) else { return }
+    try? data.write(to: permitDir.appendingPathComponent("\(p.id).answer"), options: .atomic)
+}
+
+/// What an edit changes, line by line: "+" added, "-" removed, "⋯" skipped unchanged lines.
+struct EditDiff {
+    var added = 0, removed = 0
+    var lines: [(mark: Character, text: String)] = []
+
+    init?(_ p: PermitRequest) {
+        guard let new = p.new else { return nil }
+        var old = p.old ?? ""
+        if p.old == nil, let path = p.path, let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int,
+           size < 512 * 1024, let text = try? String(contentsOfFile: path, encoding: .utf8) {
+            old = text   // Write over an existing file
+        }
+        let a = old.isEmpty ? [] : old.components(separatedBy: "\n")
+        let b = new.isEmpty ? [] : new.components(separatedBy: "\n")
+        var gone = Set<Int>(), put = Set<Int>()
+        for change in b.difference(from: a) {
+            switch change {
+            case let .remove(offset, _, _): gone.insert(offset)
+            case let .insert(offset, _, _): put.insert(offset)
+            }
+        }
+        removed = gone.count
+        added = put.count
+        var i = 0, j = 0, skipped = false
+        while i < a.count || j < b.count {
+            if i < a.count && gone.contains(i) { lines.append(("-", a[i])); i += 1; skipped = false }
+            else if j < b.count && put.contains(j) { lines.append(("+", b[j])); j += 1; skipped = false }
+            else {
+                if !skipped && !lines.isEmpty { lines.append(("⋯", "")) }
+                skipped = true
+                i += 1; j += 1
+            }
+        }
+        if lines.last?.mark == "⋯" { lines.removeLast() }
+    }
 }
 
 /// The hook waits only while this file exists, so turning the buttons off costs Claude Code nothing.
@@ -1673,13 +1728,18 @@ final class RowView: NSView {
         return frame.contains(point) && (onClick != nil || onRightClick != nil) ? self : super.hitTest(point)
     }
 
-    /// Lays buttons out in a row along the bottom, sharing the width.
-    func addButtons(_ buttons: [PillButton], height: CGFloat = 24) {
+    static let buttonRow: CGFloat = 30
+    /// Lays buttons out in rows along the bottom, each row sharing the width. Reserve
+    /// `buttonRow` points of footer per row.
+    func addButtons(_ rows: [[PillButton]], height: CGFloat = 24) {
         let gap: CGFloat = 6, inset: CGFloat = 8
-        let w = (bounds.width - inset * 2 - gap * CGFloat(buttons.count - 1)) / CGFloat(buttons.count)
-        for (i, b) in buttons.enumerated() {
-            b.frame = NSRect(x: inset + CGFloat(i) * (w + gap), y: 6, width: w, height: height)
-            addSubview(b)
+        for (k, buttons) in rows.enumerated() {
+            let y = 6 + CGFloat(rows.count - 1 - k) * Self.buttonRow
+            let w = (bounds.width - inset * 2 - gap * CGFloat(buttons.count - 1)) / CGFloat(buttons.count)
+            for (i, b) in buttons.enumerated() {
+                b.frame = NSRect(x: inset + CGFloat(i) * (w + gap), y: y, width: w, height: height)
+                addSubview(b)
+            }
         }
     }
     override func draw(_ dirtyRect: NSRect) {
@@ -1729,7 +1789,9 @@ final class RowView: NSView {
 final class PillButton: NSView {
     let title: String
     let color: NSColor
-    let filled: Bool
+    var filled: Bool { didSet { needsDisplay = true } }
+    /// Left-aligned text, for answer choices that read as a list.
+    var leading = false
     var onClick: (() -> Void)?
     private var hovering = false { didSet { needsDisplay = true } }
     private var pressed = false { didSet { needsDisplay = true } }
@@ -1759,11 +1821,15 @@ final class PillButton: NSView {
             path.lineWidth = 1.2
             path.stroke()
         }
+        let para = NSMutableParagraphStyle()
+        para.alignment = leading ? .left : .center
+        para.lineBreakMode = .byTruncatingTail
         let text = NSAttributedString(string: title, attributes: [
             .font: NSFont.systemFont(ofSize: 11.5, weight: .semibold),
-            .foregroundColor: filled ? NSColor.white : color])
-        let sz = text.size()
-        text.draw(at: NSPoint(x: (bounds.width - sz.width) / 2, y: (bounds.height - sz.height) / 2))
+            .foregroundColor: filled ? NSColor.white : color, .paragraphStyle: para])
+        let h = ceil(text.size().height)
+        text.draw(with: NSRect(x: 10, y: (bounds.height - h) / 2, width: bounds.width - 20, height: h),
+                  options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseEntered(with e: NSEvent) { hovering = true; roCursor = pointerEntered() }
@@ -2252,6 +2318,10 @@ final class PetController: NSObject, NSMenuDelegate {
     }
     var permits: [PermitRequest] = []
     var answeredPermits: Set<String> = []   // answered here; hidden until the hook removes the file
+    var questionPicks: [String: [Int: [String]]] = [:]   // request -> question index -> chosen labels
+    var questionStep: [String: Int] = [:]                // request -> question on screen (count = summary)
+    var questionNudge: Set<String> = []                  // ถัดไป pressed with nothing chosen
+    var permitKeysOn = false
     var themeChoice: String { ProcessInfo.processInfo.environment["ANGELING_THEME"] ?? d.string(forKey: "theme") ?? "classic" }
     static var characterChoice: String {
         ProcessInfo.processInfo.environment["ANGELING_CHARACTER"] ?? UserDefaults.standard.string(forKey: "character") ?? "angeling"
@@ -2459,6 +2529,88 @@ final class PetController: NSObject, NSMenuDelegate {
         answeredPermits.insert(p.id)
         if a == "deny" { showEmote("swt", for: 2.5) } else { setOverride("jumping", for: 1.0); showEmote("heh", for: 2.5) }
         refresh()
+    }
+
+    /// Questions go one at a time: `questionStep` is the one on screen, and `count` is the
+    /// summary before sending. A single plain question answers on its first click.
+    func step(_ p: PermitRequest) -> Int { questionStep[p.id] ?? 0 }
+
+    func pick(_ p: PermitRequest, option oi: Int) {
+        let at = step(p)
+        guard let qs = p.questions, qs.indices.contains(at), qs[at].options.indices.contains(oi) else { return }
+        let q = qs[at], label = q.options[oi].label
+        var picks = questionPicks[p.id] ?? [:]
+        questionNudge.remove(p.id)
+        if q.multiSelect == true {
+            var chosen = picks[at] ?? []
+            if let i = chosen.firstIndex(of: label) { chosen.remove(at: i) } else { chosen.append(label) }
+            picks[at] = chosen
+            questionPicks[p.id] = picks
+        } else {
+            picks[at] = [label]
+            questionPicks[p.id] = picks
+            if qs.count == 1 { sendAnswers(p); return }
+            questionStep[p.id] = at + 1
+        }
+        refresh()
+    }
+
+    /// ถัดไป on a multi-select question (or ส่งคำตอบ when it is the only one).
+    func nextQuestion(_ p: PermitRequest) {
+        let at = step(p)
+        guard let qs = p.questions, at < qs.count else { return }
+        guard !(questionPicks[p.id]?[at] ?? []).isEmpty else { questionNudge.insert(p.id); refresh(); return }
+        questionNudge.remove(p.id)
+        if qs.count == 1 { sendAnswers(p); return }
+        questionStep[p.id] = at + 1
+        refresh()
+    }
+
+    func previousQuestion(_ p: PermitRequest) {
+        questionNudge.remove(p.id)
+        questionStep[p.id] = max(step(p) - 1, 0)
+        refresh()
+    }
+
+    func sendAnswers(_ p: PermitRequest) {
+        guard let qs = p.questions else { return }
+        let picks = questionPicks[p.id] ?? [:]
+        guard qs.indices.allSatisfy({ !(picks[$0] ?? []).isEmpty }) else { return }
+        var answers: [String: String] = [:]
+        for (i, q) in qs.enumerated() { answers[q.question] = (picks[i] ?? []).joined(separator: ", ") }
+        answerQuestions(p, answers)
+        questionPicks[p.id] = nil
+        questionStep[p.id] = nil
+        answeredPermits.insert(p.id)
+        setOverride("jumping", for: 1.0)
+        showEmote("heh", for: 2.5)
+        refresh()
+    }
+
+    /// ⌥⌘Y / ⌥⌘N / ⌥⌘1–4 act on the oldest request, and only exist while one is waiting.
+    func permitKey(_ key: String) {
+        guard let p = permits.first else { return }
+        if let qs = p.questions, !qs.isEmpty {
+            switch key {
+            case "y": if step(p) >= qs.count { sendAnswers(p) } else { nextQuestion(p) }
+            case "n": answer(p, "deny")
+            default: if let n = Int(key) { pick(p, option: n - 1) }
+            }
+        } else if key == "y" { answer(p, "allow") }
+        else if key == "n" { answer(p, "deny") }
+    }
+
+    func syncPermitKeys() {
+        let want = !permits.isEmpty && ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil
+        guard want != permitKeysOn else { return }
+        permitKeysOn = want
+        if want {
+            setTransientHotKeys([(kVK_ANSI_Y, { [weak self] in self?.permitKey("y") }), (kVK_ANSI_N, { [weak self] in self?.permitKey("n") }),
+                                 (kVK_ANSI_1, { [weak self] in self?.permitKey("1") }), (kVK_ANSI_2, { [weak self] in self?.permitKey("2") }),
+                                 (kVK_ANSI_3, { [weak self] in self?.permitKey("3") }), (kVK_ANSI_4, { [weak self] in self?.permitKey("4") })])
+        } else {
+            setTransientHotKeys([])
+        }
     }
 
     // MARK: reminders
@@ -2868,6 +3020,16 @@ final class PetController: NSObject, NSMenuDelegate {
         // Forget answers once the hook has picked them up and removed its request.
         answeredPermits = answeredPermits.filter { FileManager.default.fileExists(atPath: permitDir.appendingPathComponent("\($0).json").path) }
         permits = permitButtons ? loadPermits().filter { !answeredPermits.contains($0.id) } : []
+        questionPicks = questionPicks.filter { id, _ in permits.contains { $0.id == id } }
+        questionStep = questionStep.filter { id, _ in permits.contains { $0.id == id } }
+        // Debug: ANGELING_PERMIT_STEP=n shows question n (count = summary), earlier ones answered with their first choice.
+        if let raw = ProcessInfo.processInfo.environment["ANGELING_PERMIT_STEP"], let n = Int(raw) {
+            for p in permits { if let qs = p.questions {
+                questionStep[p.id] = min(n, qs.count)
+                for i in 0..<min(n, qs.count) { questionPicks[p.id, default: [:]][i] = qs[i].options.first.map { [$0.label] } ?? [] }
+            } }
+        }
+        syncPermitKeys()
         let live = visibleSessions()
         let primary = live.first
         checkReminders(now)
@@ -3075,7 +3237,7 @@ final class PetController: NSObject, NSMenuDelegate {
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
         let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)" }.joined()
-        let permitSig = permits.map(\.id).joined(separator: ",")
+        let permitSig = permits.map { p in p.id + "s\(questionStep[p.id] ?? 0)\(questionNudge.contains(p.id))" + (questionPicks[p.id].map { "\($0.sorted { $0.key < $1.key }.map { $0.value })" } ?? "") }.joined(separator: ",")
         return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
@@ -3183,27 +3345,108 @@ final class PetController: NSObject, NSMenuDelegate {
             return r
         }
         // A permission prompt with its answer buttons. It replaces its session's row.
-        func permitRow(_ p: PermitRequest) -> RowView {
+        func indented(_ a: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+            guard theme.minimal else { return a }
+            var a = a
+            let para = NSMutableParagraphStyle()
+            para.firstLineHeadIndent = dotIndent
+            para.headIndent = dotIndent
+            a[.paragraphStyle] = para
+            return a
+        }
+        func diffText(_ d: EditDiff) -> NSAttributedString {
+            let out = NSMutableAttributedString()
+            let font = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
+            let counts = NSMutableAttributedString(string: "\n+\(d.added)", attributes: indented([.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold), .foregroundColor: theme.done]))
+            counts.append(NSAttributedString(string: "  −\(d.removed)", attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold), .foregroundColor: theme.alert]))
+            out.append(counts)
+            let maxLines = 10
+            for l in d.lines.prefix(maxLines) {
+                let text = l.mark == "⋯" ? "  ⋯" : "\(l.mark) " + fit(l.text.replacingOccurrences(of: "\t", with: "  "), font: font, maxWidth: w - 30)
+                let color = l.mark == "+" ? theme.done : l.mark == "-" ? theme.alert : theme.secondary
+                var a = indented([.font: font, .foregroundColor: color])
+                if l.mark != "⋯" { a[.backgroundColor] = color.withAlphaComponent(0.1) }
+                out.append(NSAttributedString(string: "\n" + text, attributes: a))
+            }
+            if d.lines.count > maxLines {
+                out.append(NSAttributedString(string: "\n  …อีก \(d.lines.count - maxLines) บรรทัด", attributes: indented([.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: theme.secondary])))
+            }
+            return out
+        }
+        func hint(_ text: String) -> NSAttributedString {
+            NSAttributedString(string: "\n" + text, attributes: indented([.font: NSFont.systemFont(ofSize: 10), .foregroundColor: theme.secondary]))
+        }
+        func permitRows(_ p: PermitRequest) -> [RowView] {
             let session = sessions.first { $0.0.session == p.session }?.0
-            let t = rowHeader(icon: "🔐", title: p.project ?? session?.project ?? "Claude Code", titleColor: theme.project, dot: theme.alert,
-                              status: "ขออนุญาต", statusColor: theme.alert, statusBold: true, width: w)
+            let hotkeys = p.id == permits.first?.id
+            let header = { (status: String) in
+                self.rowHeader(icon: "🔐", title: p.project ?? session?.project ?? "Claude Code", titleColor: theme.project, dot: theme.alert,
+                               status: status, statusColor: theme.alert, statusBold: true, width: w)
+            }
+            func row(_ t: NSAttributedString, buttons: [[PillButton]]) -> RowView {
+                let r = RowView(text: t, width: w, clickable: true, footer: RowView.buttonRow * CGFloat(buttons.count))
+                r.accent = theme.alert
+                r.pulse = true
+                r.toolTip = "ตอบได้ทั้งที่นี่และใน Claude Code · คลิกที่ข้อความเพื่อไปที่ session นี้"
+                if let session { r.onClick = { [weak self] in self?.openSession(session) } }
+                r.addButtons(buttons)
+                return r
+            }
+
+            if let questions = p.questions, !questions.isEmpty {
+                // One question at a time, then a summary to send.
+                let n = questions.count, at = min(step(p), n)
+                let picks = questionPicks[p.id] ?? [:]
+                let progress = n > 1 ? (at < n ? " · ข้อ \(at + 1)/\(n) " : " · ") + String((0..<n).map { $0 <= at ? "●" : "○" }) : ""
+                let back = PillButton("← ย้อนกลับ", color: theme.secondary, filled: false)
+                back.onClick = { [weak self] in self?.previousQuestion(p) }
+
+                if at == n {
+                    let t = header("สรุปคำตอบ" + progress)
+                    for (i, q) in questions.enumerated() {
+                        t.append(rowLine((q.header.map { "[\($0)] " } ?? "\(i + 1). ") + (picks[i] ?? []).joined(separator: ", "), size: 12))
+                    }
+                    if hotkeys { t.append(hint("⌥⌘Y ส่ง · ⌥⌘N ไม่ตอบ")) }
+                    let send = PillButton("ส่งคำตอบ", color: theme.done, filled: true)
+                    send.onClick = { [weak self] in self?.sendAnswers(p) }
+                    return [row(t, buttons: [[back, send]])]
+                }
+
+                let q = questions[at], multi = q.multiSelect == true
+                let t = header("ถามคุณ" + progress)
+                t.append(rowLine((q.header.map { "[\($0)] " } ?? "") + q.question, size: 12, bold: true))
+                if multi { t.append(hint("เลือกได้หลายข้อ")) }
+                if questionNudge.contains(p.id) {
+                    t.append(NSAttributedString(string: "\nเลือกอย่างน้อยหนึ่งข้อก่อน", attributes: indented([.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: theme.alert])))
+                }
+                if hotkeys { t.append(hint("⌥⌘1–\(min(q.options.count, 4)) เลือก" + (multi ? " · ⌥⌘Y ถัดไป" : "") + " · ⌥⌘N ไม่ตอบ")) }
+                var rows: [[PillButton]] = q.options.enumerated().map { oi, o in
+                    let chosen = picks[at]?.contains(o.label) == true
+                    let box = multi ? (chosen ? "☑ " : "☐ ") : ""
+                    let b = PillButton("\(oi + 1)  \(box)\(o.label)", color: theme.running, filled: chosen)
+                    b.leading = true
+                    b.toolTip = o.description
+                    b.onClick = { [weak self] in self?.pick(p, option: oi) }
+                    return [b]
+                }
+                var nav: [PillButton] = at > 0 ? [back] : []
+                if multi {
+                    let next = PillButton(n == 1 ? "ส่งคำตอบ" : at == n - 1 ? "สรุป →" : "ถัดไป →", color: theme.done, filled: n == 1)
+                    next.onClick = { [weak self] in self?.nextQuestion(p) }
+                    nav.append(next)
+                }
+                if !nav.isEmpty { rows.append(nav) }
+                return [row(t, buttons: rows)]
+            }
+
+            let t = header("ขออนุญาต")
             let what = [p.title ?? p.tool ?? "", p.note ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")
             if !what.isEmpty { t.append(rowLine(what, size: 11, color: theme.secondary)) }
             if let detail = p.detail, !detail.isEmpty {
-                var a: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: theme.text]
-                if theme.minimal {
-                    let para = NSMutableParagraphStyle()
-                    para.firstLineHeadIndent = dotIndent
-                    para.headIndent = dotIndent
-                    a[.paragraphStyle] = para
-                }
-                t.append(NSAttributedString(string: "\n" + detail, attributes: a))
+                t.append(NSAttributedString(string: "\n" + detail, attributes: indented([.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: theme.text])))
             }
-            let r = RowView(text: t, width: w, clickable: true, footer: 30)
-            r.accent = theme.alert
-            r.pulse = true
-            r.toolTip = "ตอบได้ทั้งที่นี่และใน Claude Code · คลิกที่ข้อความเพื่อไปที่ session นี้"
-            if let session { r.onClick = { [weak self] in self?.openSession(session) } }
+            if let d = EditDiff(p) { t.append(diffText(d)) }
+            if hotkeys { t.append(hint("⌥⌘Y อนุญาต · ⌥⌘N ปฏิเสธ")) }
             var buttons = [PillButton("อนุญาต", color: theme.done, filled: true)]
             buttons[0].onClick = { [weak self] in self?.answer(p, "allow") }
             if p.canAlways == true {
@@ -3215,10 +3458,9 @@ final class PetController: NSObject, NSMenuDelegate {
             let deny = PillButton("ปฏิเสธ", color: theme.alert, filled: false)
             deny.onClick = { [weak self] in self?.answer(p, "deny") }
             buttons.append(deny)
-            r.addButtons(buttons)
-            return r
+            return [row(t, buttons: [buttons])]
         }
-        let permitRows = permits.map(permitRow)
+        let permitRows = permits.flatMap(permitRows)
         let asking = Set(permits.compactMap(\.session))
         let live = live.filter { !asking.contains($0.0.session ?? "") }
 
@@ -3836,6 +4078,21 @@ func registerHotKeys(_ keys: [(Int, () -> Void)]) {
         RegisterEventHotKey(UInt32(code), UInt32(cmdKey | optionKey), EventHotKeyID(signature: OSType(0x414E474C), id: id), // 'ANGL'
                             GetApplicationEventTarget(), 0, &ref)
         hotKeyRefs.append(ref)
+    }
+}
+
+/// Hot keys that exist only for a while (⌥⌘Y / ⌥⌘N / ⌥⌘1–4 while a permission request waits),
+/// so they never take those keys from other apps the rest of the time. Pass [] to drop them.
+var transientHotKeyRefs: [EventHotKeyRef] = []
+func setTransientHotKeys(_ keys: [(Int, () -> Void)]) {
+    transientHotKeyRefs.forEach { UnregisterEventHotKey($0) }
+    transientHotKeyRefs = []
+    for (i, (code, action)) in keys.enumerated() {
+        let id = UInt32(100 + i)
+        hotKeyActions[id] = action
+        var ref: EventHotKeyRef?
+        if RegisterEventHotKey(UInt32(code), UInt32(cmdKey | optionKey), EventHotKeyID(signature: OSType(0x414E474C), id: id),
+                               GetApplicationEventTarget(), 0, &ref) == noErr, let ref { transientHotKeyRefs.append(ref) }
     }
 }
 

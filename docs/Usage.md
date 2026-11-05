@@ -46,6 +46,7 @@ listen_on unix:/tmp/kitty-{kitty_pid}
 |---|---|
 | ⌥⌘A | ซ่อนหรือแสดง Angeling |
 | ⌥⌘R | [ตั้งเตือน](Reminders.md) |
+| ⌥⌘Y / ⌥⌘N / ⌥⌘1–4 | อนุญาต / ปฏิเสธ / เลือกคำตอบ ใช้ได้เฉพาะตอน Claude Code รอคำตอบ ดู[ตอบคำขออนุญาต](Permission-Buttons.md#คีย์ลัด) |
 
 ## เมนู
 
