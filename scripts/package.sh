@@ -25,7 +25,7 @@ codesign --force --sign - "$STAGE/Angeling.app" >/dev/null 2>&1
 
 mkdir -p "$STAGE/scripts" "$STAGE/hooks"
 cp -R "$ROOT/assets" "$STAGE/assets"
-cp "$ROOT/hooks/angeling-hook.sh" "$STAGE/hooks/"
+cp "$ROOT"/hooks/*.sh "$STAGE/hooks/"
 cp "$ROOT/scripts/fetch-assets.sh" "$STAGE/scripts/"
 cp "$ROOT/install.sh" "$ROOT/uninstall.sh" "$ROOT/LICENSE" "$ROOT/README.md" "$STAGE/"
 (cd "$DIST/stage" && ditto -c -k --keepParent angeling-pet "$DIST/Angeling.zip")
