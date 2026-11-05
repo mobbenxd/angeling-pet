@@ -49,6 +49,10 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 | | [Emotes and animations](docs/Emotes-and-Animations.md) | |
 | | [Use a different pet](docs/Custom-Pet.md) | |
 
+## ขนาดตัวละคร
+
+ตั้งค่า → หน้าตา → ขนาดตัวละคร: ปรับ 100–250% แล้วเห็นผลทันที มีปุ่ม 100%, 150%, 200% และคืนค่า แอปจำขนาดแยกแต่ละตัวละคร โดย Chawee & Ma Jing เริ่มที่ 150% ตัวอื่น 100% กล่องข้อความและปุ่มไม่ขยายตาม ตัวละครขยายจากตำแหน่งเท้าเดิม ยกเว้นเมื่อจำเป็นต้องขยับให้อยู่ในขอบจอ
+
 ## Features
 
 - **Activity bubble**: one row per session, showing its status (กำลังทำ / ต้องดูตอนนี้ / ติดปัญหา / เสร็จแล้ว), what it is doing right now, the prompt, and the task-list progress.

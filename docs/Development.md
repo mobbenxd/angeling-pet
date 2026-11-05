@@ -142,5 +142,11 @@ env -i HOME=/tmp/fakehome PATH=/usr/bin:/bin:/usr/sbin:/sbin ANGELING_NO_LAUNCH=
 
 คู่มืออยู่ใน `docs/` ให้แก้แล้วเปิด PR เหมือนโค้ด ลิงก์ระหว่างหน้าให้ใช้ชื่อไฟล์แบบมี `.md` เช่น `[การติดตั้ง](Installation.md)` และถ้าเพิ่มหน้าใหม่ ให้เพิ่มลิงก์ใน `docs/README.md` ด้วย
 
+## ทดสอบขนาดตัวละคร
+
+รัน `python3 tests/run-character-size.py` เพื่อตรวจค่าเริ่มต้น ขอบเขต 100–250% การจำค่าแยกตัวละคร และการคืนค่า โดยใช้ preferences สำหรับทดสอบแยกจากแอปจริง
+
+ใช้ `ANGELING_CHARACTER_SCALE=2.5` ร่วมกับโหมด snapshot เพื่อตรวจภาพขนาด 250% โดยไม่เปลี่ยนค่าที่บันทึกไว้
+
 ---
 [← สารบัญคู่มือ](README.md)

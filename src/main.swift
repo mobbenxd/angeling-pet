@@ -26,6 +26,23 @@ let baseDir = home.appendingPathComponent(".claude/angeling-pet")
 let stateDir = ProcessInfo.processInfo.environment["ANGELING_STATE_DIR"].map { URL(fileURLWithPath: $0) }
     ?? baseDir.appendingPathComponent("state")
 
+// MARK: - Character sizing
+// Values are independent per character; existing characters retain their original size.
+enum CharacterSizing {
+    static func clamp(_ value: Double) -> Double { value.isFinite ? min(2.5, max(1, value)) : 1 }
+    static func defaultValue(_ id: String) -> Double { id == "chawee-majing" ? 1.5 : 1 }
+    static func value(_ id: String, defaults: UserDefaults = .standard) -> Double {
+        guard let saved = defaults.object(forKey: "characterScale." + id) as? Double else { return defaultValue(id) }
+        return clamp(saved)
+    }
+    static func set(_ value: Double, for id: String, defaults: UserDefaults = .standard) {
+        defaults.set(clamp(value), forKey: "characterScale." + id)
+    }
+    static func reset(_ id: String, defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: "characterScale." + id)
+    }
+}
+
 // MARK: - Sprite sheet (Codex pet format v2: 8 cols x 11 rows, 192x208 cells)
 
 struct Anim {
@@ -1988,7 +2005,19 @@ final class PetView: NSImageView {
 // MARK: - Controller
 
 final class PetController: NSObject, NSMenuDelegate {
-    let petSize = NSSize(width: 67, height: 73)
+    var characterScale: Double {
+        if let raw = ProcessInfo.processInfo.environment["ANGELING_CHARACTER_SCALE"], let v = Double(raw) { return CharacterSizing.clamp(v) }
+        return CharacterSizing.value(Self.characterChoice, defaults: d)
+    }
+    var petSize: NSSize { NSSize(width: 67 * characterScale, height: 73 * characterScale) }
+    func setCharacterScale(_ value: Double) {
+        CharacterSizing.set(value, for: Self.characterChoice, defaults: d)
+        refresh()
+    }
+    func resetCharacterScale() {
+        CharacterSizing.reset(Self.characterChoice, defaults: d)
+        refresh()
+    }
     let winWidth: CGFloat = 300
     let panel: NSPanel
     let bubble = BubbleView(frame: .zero)
@@ -2646,6 +2675,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func setCharacter(_ id: String) {
         d.set(id, forKey: "character")
         showCharacter(id)
+        refresh()
         statusItem.button?.image = statusIcon()
         setOverride("waving", for: 1.2)
     }
@@ -3364,6 +3394,34 @@ struct SettingsPane: View {
                 Picker("ธีม", selection: m.bind({ c.themeChoice }, { c.setTheme($0) })) {
                     ForEach(Theme.choices, id: \.0) { Text($0.1).tag($0.0) }
                 }
+            }
+            Section {
+                HStack {
+                    Text("ขนาด")
+                    Spacer()
+                    Text("\(Int((c.characterScale * 100).rounded()))%")
+                        .monospacedDigit().foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("100%").font(.caption)
+                    Slider(value: m.bind({ c.characterScale }, { c.setCharacterScale($0) }), in: 1...2.5, step: 0.05)
+                        .accessibilityLabel("ขนาดตัวละคร")
+                    Text("250%").font(.caption)
+                }
+                HStack {
+                    ForEach([100, 150, 200], id: \.self) { percent in
+                        Button("\(percent)%") {
+                            c.setCharacterScale(Double(percent) / 100)
+                            m.objectWillChange.send()
+                        }
+                    }
+                    Spacer()
+                    Button("คืนค่า") { c.resetCharacterScale(); m.objectWillChange.send() }
+                }
+            } header: {
+                Text("ขนาดตัวละคร")
+            } footer: {
+                Text("เปลี่ยนทันทีและจำขนาดแยกแต่ละตัวละคร").font(.caption).foregroundStyle(.secondary)
             }
             if !bomberCharacters.isEmpty || !codexPets.isEmpty {
                 Section("ตัวละคร") {
