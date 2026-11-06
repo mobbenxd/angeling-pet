@@ -425,6 +425,17 @@ func syncPermitFlag(_ on: Bool) {
     }
 }
 
+/// While this file exists the hook leaves AskUserQuestion to Claude Code and does not wait.
+func syncQuestionFlag(_ on: Bool) {
+    let f = permitDir.appendingPathComponent("no-questions")
+    if on {
+        try? FileManager.default.removeItem(at: f)
+    } else {
+        try? FileManager.default.createDirectory(at: permitDir, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: f.path) { FileManager.default.createFile(atPath: f.path, contents: nil) }
+    }
+}
+
 // MARK: - Themes
 //   Classic is the original pink bubble. The minimal themes drop emoji and framed rows: a coloured
 //   dot marks each row's state, the status sits on the right, and only rows that need you are tinted.
@@ -2410,6 +2421,11 @@ final class PetController: NSObject, NSMenuDelegate {
         get { flag("permitButtons") }
         set { d.set(newValue, forKey: "permitButtons"); syncPermitFlag(newValue); refresh() }
     }
+    /// Claude's own questions (AskUserQuestion) in the bubble; off leaves them to Claude Code alone.
+    var permitQuestions: Bool {
+        get { flag("permitQuestions") }
+        set { d.set(newValue, forKey: "permitQuestions"); syncQuestionFlag(newValue); refresh() }
+    }
     var permits: [PermitRequest] = []
     var answeredPermits: Set<String> = []   // answered here; hidden until the hook removes the file
     var questionPicks: [String: [Int: [String]]] = [:]   // request -> question index -> chosen labels
@@ -2506,7 +2522,7 @@ final class PetController: NSObject, NSMenuDelegate {
         statusItem.menu = m
 
         if !petHidden { panel.orderFrontRegardless() }
-        if ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil { syncPermitFlag(permitButtons) }
+        if ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil { syncPermitFlag(permitButtons); syncQuestionFlag(permitQuestions) }
         play("idle")
         refresh()
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
@@ -3113,7 +3129,7 @@ final class PetController: NSObject, NSMenuDelegate {
             }
         // Forget answers once the hook has picked them up and removed its request.
         answeredPermits = answeredPermits.filter { FileManager.default.fileExists(atPath: permitDir.appendingPathComponent("\($0).json").path) }
-        permits = permitButtons ? loadPermits().filter { !answeredPermits.contains($0.id) } : []
+        permits = permitButtons ? loadPermits().filter { !answeredPermits.contains($0.id) && (permitQuestions || $0.questions == nil) } : []
         questionPicks = questionPicks.filter { id, _ in permits.contains { $0.id == id } }
         questionStep = questionStep.filter { id, _ in permits.contains { $0.id == id } }
         // Debug: ANGELING_PERMIT_STEP=n shows question n (count = summary), earlier ones answered with their first choice.
@@ -3930,8 +3946,10 @@ struct SettingsPane: View {
             }
             Section {
                 Toggle("ตอบคำขออนุญาตของ Claude Code จาก Angeling", isOn: m.bind({ c.permitButtons }, { c.permitButtons = $0 }))
+                Toggle("แสดงคำถามของ Claude ให้ตอบจาก Angeling", isOn: m.bind({ c.permitQuestions }, { c.permitQuestions = $0 }))
+                    .disabled(!c.permitButtons)
             } footer: {
-                Text("ปุ่ม อนุญาต / ปฏิเสธ ขึ้นในบับเบิลพร้อมกับที่ Claude Code ถาม ตอบที่ไหนก่อนก็ได้").font(.caption).foregroundStyle(.secondary)
+                Text("ปุ่ม อนุญาต / ปฏิเสธ และตัวเลือกคำถามขึ้นในบับเบิลพร้อมกับที่ Claude Code ถาม ตอบที่ไหนก่อนก็ได้ ปิดคำถามแล้วต้องตอบใน Claude Code เอง").font(.caption).foregroundStyle(.secondary)
             }
             Section("แสดงในบับเบิล") {
                 Toggle("งานที่สั่ง (prompt)", isOn: m.flag("showTask"))

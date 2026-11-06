@@ -1,9 +1,11 @@
 #!/bin/bash
 # Angeling pet: answer Claude Code's permission prompts from the pet (PermissionRequest hook).
-# Claude Code shows its own prompt while this runs, so whichever is answered first wins:
-# answering in the terminal sends this script SIGTERM, and the trap cleans up.
+# Claude Code shows its own prompt while this runs, so whichever is answered first wins.
+# Answering in Claude Code usually sends this script SIGTERM, but not always, so the wait loop
+# also watches the transcript and gives up once the tool has a result there.
 # Protocol, in ~/.claude/angeling-pet/permits/:
 #   enabled        exists while the pet's buttons are on (the app keeps it in sync)
+#   no-questions   exists while the pet should leave AskUserQuestion to Claude Code alone
 #   <id>.json      the request, written here; the app shows it with buttons
 #   <id>.answer    written by the app: allow | always | deny, or for AskUserQuestion a JSON
 #                  object mapping each question to the chosen label(s)
@@ -15,11 +17,14 @@ pgrep -xq Angeling || exit 0
 JQ=/opt/homebrew/bin/jq
 [ -x "$JQ" ] || JQ=jq
 command -v "$JQ" >/dev/null || exit 0
+TOOL=$(echo "$INPUT" | $JQ -r '.tool_name // empty')
+[ "$TOOL" = "AskUserQuestion" ] && [ -f "$DIR/no-questions" ] && exit 0
 
 ID="$(date +%s)-$$-$RANDOM"
 REQ="$DIR/$ID.json"
 ANS="$DIR/$ID.answer"
-cleanup() { rm -f "$REQ" "$ANS"; }
+REQIN="$DIR/.$ID.in"
+cleanup() { rm -f "$REQ" "$ANS" "$REQIN"; }
 trap 'cleanup; exit 0' TERM INT HUP
 trap cleanup EXIT
 
@@ -67,9 +72,39 @@ echo "$INPUT" | $JQ -c --arg id "$ID" --argjson pid $$ --arg now "$(date +%s)" '
             else null end | cap)
     }' > "$TMP" 2>/dev/null && mv "$TMP" "$REQ" || { rm -f "$TMP"; exit 0; }
 
-# Wait for the pet. Claude Code stops this hook when its timeout passes or the prompt is answered.
+# The transcript gets the tool's result once the prompt is answered in Claude Code (or the turn
+# is interrupted). Find this request's tool_use id: the newest call with the same tool and input.
+TRANSCRIPT=$(echo "$INPUT" | $JQ -r '.transcript_path // empty')
+[ -f "$TRANSCRIPT" ] || TRANSCRIPT=""
+START=0
+[ -n "$TRANSCRIPT" ] && START=$(stat -f %z "$TRANSCRIPT" 2>/dev/null || echo 0)
+TOOL_ID=""
+[ -n "$TRANSCRIPT" ] && { echo "$INPUT" > "$REQIN" || TRANSCRIPT=""; }
+find_tool_id() {
+  # Exact tool and input first; otherwise the newest call of that tool.
+  TOOL_ID=$(tail -c 2000000 "$TRANSCRIPT" 2>/dev/null | grep -F '"tool_use"' | $JQ -rR --slurpfile req "$REQIN" '
+    fromjson? | select(.type == "assistant") | (.message.content // [])[]?
+    | select(.type == "tool_use" and .name == $req[0].tool_name)
+    | "\(if .input == $req[0].tool_input then 1 else 0 end) \(.id)"' 2>/dev/null | sort -s -k1,1 | tail -1 | cut -d' ' -f2)
+}
+answered_elsewhere() {
+  [ -n "$TRANSCRIPT" ] || return 1
+  [ -n "$TOOL_ID" ] || find_tool_id
+  [ -n "$TOOL_ID" ] || return 1
+  # Only text written after this hook started can hold the result.
+  tail -c +$((START + 1)) "$TRANSCRIPT" 2>/dev/null | grep -qF "\"tool_use_id\":\"$TOOL_ID\""
+}
+
+# Wait for the pet. Claude Code stops this hook when its timeout passes or (usually) when the
+# prompt is answered there; the transcript check covers the times it does not.
+N=0
 while [ ! -s "$ANS" ]; do
   [ -f "$DIR/enabled" ] || exit 0
+  if [ $((N % 4)) -eq 0 ]; then
+    answered_elsewhere && exit 0
+    [ "$TOOL" = "AskUserQuestion" ] && [ -f "$DIR/no-questions" ] && exit 0
+  fi
+  N=$((N + 1))
   sleep 0.25
 done
 
