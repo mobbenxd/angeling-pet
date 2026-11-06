@@ -61,13 +61,16 @@ Angeling แสดงว่าใช้ limit ของ Claude, Codex และ 
 
 ## ทำงานอย่างไร (Claude)
 
-Angeling อ่านตัวเลขจาก 2 ทาง แต่ละทางเก็บไฟล์ของตัวเองใน `~/.claude/angeling-pet/` ถ้าตัวเลขจาก API อายุไม่เกิน 15 นาทีจะใช้ตัวนั้น ไม่อย่างนั้นใช้ของ status line
+Angeling อ่านตัวเลขจาก 2 ทาง แต่ละทางเก็บไฟล์ของตัวเองใน `~/.claude/angeling-pet/` ถ้าตัวเลขจาก API อายุไม่เกิน 15 นาทีจะใช้ตัวนั้น ไม่อย่างนั้นใช้ตัวที่ใหม่กว่า
+
+ถ้าตัวเลขที่แสดงเก่ากว่า 30 นาที Angeling จะบอกเวลาของข้อมูลต่อท้าย เช่น `5 ชม. 40% · ข้อมูล พฤ. 17:54` และในเมนูจะมีบรรทัด "ข้อมูลเมื่อ … อาจไม่ตรงกับตอนนี้" ตัวเลขชุดนั้นอาจไม่ตรงกับ `/usage` แล้ว
 
 **1. usage API ของ Claude** (ทางหลัก ทุก 5 นาที เก็บใน `limits-api.json`) เป็นตัวเลขชุดเดียวกับ `/usage` ใน Claude Code ใช้ได้ไม่ว่าจะใช้ Claude Code ผ่าน Terminal หรือแอป Claude desktop
 
 - ใช้ login ของ Claude Code ที่มีอยู่แล้ว Angeling อ่าน token จาก Keychain (`Claude Code-credentials`) ผ่าน `/usr/bin/security` หรือจาก `~/.claude/.credentials.json` ถ้า macOS ถามสิทธิ์ ให้กด **Always Allow** (ถ้าไม่ตอบภายใน 20 วินาที Angeling จะข้ามรอบนั้นไป) token ที่อ่านแล้วจะจำไว้จนหมดอายุ Keychain จึงถูกอ่านครั้งเดียวต่อ token
-- Angeling แค่อ่าน token ไม่ต่ออายุให้ ถ้า token หมดอายุ ตัวเลขจะค้างค่าล่าสุดไว้จนกว่าจะใช้ Claude Code อีกครั้ง
-- **ความเป็นส่วนตัว:** ระหว่างเปิด limit ไว้ Angeling จะส่ง token นี้ไปที่ `api.anthropic.com` ทุก 5 นาที ไม่ส่งไปที่อื่น ปิด limit แล้วจะหยุดส่ง
+- token ของ Claude Code อยู่ได้ไม่กี่ชั่วโมง ถ้าใช้แต่แอป Claude desktop (ซึ่ง login แยกของตัวเอง) จะไม่มีใครต่ออายุ token นี้ให้ เมื่อหมดอายุ Angeling จึงต่ออายุเองด้วย refresh token แบบเดียวกับที่ Claude Code ทำ (ส่งไปที่ `platform.claude.com`) แล้วเขียน token ใหม่กลับลง Keychain item เดิม ค่าอื่นใน item ไม่เปลี่ยน `claude` ใน Terminal จึงยัง login อยู่ตามปกติ
+- ถ้าต่ออายุไม่สำเร็จ (เช่น refresh token หมดอายุ) ตัวเลขจะค้างค่าล่าสุดพร้อมเวลาของข้อมูล ให้เปิด `claude` ใน Terminal สักครั้ง (หรือ `/login` ใหม่)
+- **ความเป็นส่วนตัว:** ระหว่างเปิด limit ไว้ Angeling จะส่ง token นี้ไปที่ `api.anthropic.com` ทุก 5 นาที และส่ง refresh token ไปที่ `platform.claude.com` เฉพาะตอนต่ออายุ ไม่ส่งไปที่อื่น ปิด limit แล้วจะหยุดส่ง
 - วิธีนี้ดัดแปลงมาจาก [CodexBar](https://github.com/steipete/CodexBar) API นี้ไม่มีเอกสารทางการ จึงอาจเปลี่ยนได้ ถ้าใช้ไม่ได้ ยังมีทางที่ 2
 
 **2. status line ของ Claude Code** (เก็บใน `limits.json`) Claude Code ส่งข้อมูล limit ให้เฉพาะ status line ไม่ได้ส่งให้ hook ทางนี้จะอัปเดตเฉพาะตอนใช้ `claude` ใน Terminal ตอนเปิดใช้ Angeling จะ:

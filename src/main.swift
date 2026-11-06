@@ -1049,7 +1049,7 @@ final class ReminderForm: NSObject {
 // MARK: - Usage limits (Claude's, Codex's and AGY's 5-hour and weekly rate limits)
 // Two sources, each with its own file in the status line's shape:
 // - limits-api.json: Claude's usage API (what /usage shows), every 5 minutes, with Claude Code's own login token
-//   read through /usr/bin/security. The token is only read; refreshing it is left to Claude Code. Works from any
+//   read through /usr/bin/security, renewed here once expired (see `renewLogin`). Works from any
 //   Claude app, so it wins while it is fresh.
 // - limits.json: Claude Code passes rate_limits to the status line, not to hooks. Turning the feature on points
 //   settings.json's statusLine at a small wrapper that saves the status JSON and then runs the user's own
@@ -1134,14 +1134,27 @@ enum UsageLimits {
     struct Failure: LocalizedError { let errorDescription: String? }
 
     /// What limits.json says now. Debug: ANGELING_LIMITS="62,40" (week,5h), "71" (week only), "none", "wait".
-    static func read() -> LimitState {
-        if let fake = ProcessInfo.processInfo.environment["ANGELING_LIMITS"] { return self.fake(fake) }
+    static func read() -> LimitState { current().state }
+
+    /// The limits and when they were saved: the API's while fresh, otherwise whichever source is newer.
+    static func current() -> (state: LimitState, asOf: Date?) {
+        let env = ProcessInfo.processInfo.environment
+        if let fake = env["ANGELING_LIMITS"] { return (self.fake(fake), fakeAsOf()) }
         let fm = FileManager.default
         let api = windows(apiFile), status = windows(file)
-        let apiAge = ((try? fm.attributesOfItem(atPath: apiFile.path))?[.modificationDate] as? Date).map { -$0.timeIntervalSinceNow }
-        if let api, let age = apiAge, age < apiFresh { return api }
-        if let w = status ?? api { return w }
-        return fm.fileExists(atPath: file.path) || fm.fileExists(atPath: apiFile.path) ? .noData : .waiting
+        let apiDate = modified(apiFile), statusDate = modified(file)
+        if let api, let d = apiDate, -d.timeIntervalSinceNow < apiFresh { return (api, d) }
+        switch (api, status) {
+        case let (a?, s?): return (apiDate ?? .distantPast) >= (statusDate ?? .distantPast) ? (a, apiDate) : (s, statusDate)
+        case let (a?, nil): return (a, apiDate)
+        case let (nil, s?): return (s, statusDate)
+        default: return (fm.fileExists(atPath: file.path) || fm.fileExists(atPath: apiFile.path) ? .noData : .waiting, nil)
+        }
+    }
+
+    /// Debug: ANGELING_LIMIT_AGE="900" makes faked limits that many minutes old.
+    static func fakeAsOf() -> Date? {
+        ProcessInfo.processInfo.environment["ANGELING_LIMIT_AGE"].flatMap(Double.init).map { Date().addingTimeInterval(-$0 * 60) }
     }
 
     /// A debug fake: "62,40" (week,5h), "71" (week only), "none", "wait".
@@ -1266,21 +1279,98 @@ enum UsageLimits {
     /// Kept until it expires or gets a 401, so the Keychain is read once per token, not every 5 minutes.
     private static var cachedToken: (token: String, expires: Date)?
 
+    static let keychainService = "Claude Code-credentials"
+    /// Claude Code's own OAuth client and token endpoint, the ones its CLI renews with.
+    static let oauthClient = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    static let tokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
+
     /// Claude Code's access token, from its Keychain item (macOS) or ~/.claude/.credentials.json.
-    /// An expired token is skipped: Claude Code renews it the next time it runs.
+    /// An expired Keychain token is renewed here and written back, the way Claude Code does it: the Claude desktop app
+    /// signs in on its own and never renews the CLI's token, so without this the limits stop once it expires.
     static func loginToken() -> String? {
-        if let c = cachedToken, c.expires > Date() { return c.token }
+        if let c = cachedToken, c.expires > Date().addingTimeInterval(60) { return c.token }
         cachedToken = nil
-        let keychain = Focus.output("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], timeout: 20)
-        for data in [keychain.flatMap { $0.data(using: .utf8) }, try? Data(contentsOf: home.appendingPathComponent(".claude/.credentials.json"))] {
+        let keychain = Focus.output("/usr/bin/security", ["find-generic-password", "-s", keychainService, "-w"], timeout: 20)
+        let sources: [(Data?, Bool)] = [(keychain.flatMap { $0.data(using: .utf8) }, true),
+                                        (try? Data(contentsOf: home.appendingPathComponent(".claude/.credentials.json")), false)]
+        for (data, inKeychain) in sources {
             guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let oauth = root["claudeAiOauth"] as? [String: Any], let token = oauth["accessToken"] as? String else { continue }
             let expires = (oauth["expiresAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) } ?? .distantFuture
-            guard expires > Date() else { return nil }
-            cachedToken = (token, expires)
-            return token
+            guard expires <= Date().addingTimeInterval(60) else {
+                cachedToken = (token, expires)
+                return token
+            }
+            return inKeychain ? renewLogin(root, oauth) : nil
         }
         return nil
+    }
+
+    /// Renew the login with its refresh token and save the new tokens to the same Keychain item, keeping every
+    /// other field. Refresh tokens rotate, so the new one must be saved or Claude Code would have to sign in again.
+    private static func renewLogin(_ root: [String: Any], _ oauth: [String: Any]) -> String? {
+        guard let refresh = oauth["refreshToken"] as? String else { return nil }
+        if let r = (oauth["refreshTokenExpiresAt"] as? NSNumber)?.doubleValue, r / 1000 < Date().timeIntervalSince1970 { return nil }
+        var body: [String: Any] = ["grant_type": "refresh_token", "refresh_token": refresh,
+                                   "client_id": oauth["clientId"] as? String ?? oauthClient]
+        if let scopes = oauth["scopes"] as? [String], !scopes.isEmpty { body["scope"] = scopes.joined(separator: " ") }
+        var req = URLRequest(url: tokenURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        req.httpMethod = "POST"
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("claude-cli/2.1.0 (external, cli)", forHTTPHeaderField: "User-Agent")
+        var reply: [String: Any]?
+        let done = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            if (resp as? HTTPURLResponse)?.statusCode == 200, let data { reply = try? JSONSerialization.jsonObject(with: data) as? [String: Any] }
+            done.signal()
+        }.resume()
+        done.wait()
+        guard let reply, let token = reply["access_token"] as? String,
+              let lifetime = (reply["expires_in"] as? NSNumber)?.doubleValue else {
+            FileHandle.standardError.write("Angeling: renewing Claude Code's login failed\n".data(using: .utf8)!)
+            return nil
+        }
+        let now = Date().timeIntervalSince1970
+        var fresh = oauth
+        fresh["accessToken"] = token
+        fresh["refreshToken"] = reply["refresh_token"] as? String ?? refresh
+        fresh["expiresAt"] = Int64((now + lifetime) * 1000)
+        if let r = (reply["refresh_token_expires_in"] as? NSNumber)?.doubleValue { fresh["refreshTokenExpiresAt"] = Int64((now + r) * 1000) }
+        if let s = reply["scope"] as? String, !s.isEmpty { fresh["scopes"] = s.split(separator: " ").map(String.init) }
+        var newRoot = root
+        newRoot["claudeAiOauth"] = fresh
+        if !saveKeychain(newRoot) {
+            FileHandle.standardError.write("Angeling: saving Claude Code's renewed login to the Keychain failed\n".data(using: .utf8)!)
+        }
+        cachedToken = (token, Date(timeIntervalSince1970: now + lifetime))
+        return token
+    }
+
+    /// Overwrite Claude Code's Keychain item, under the account it already has, through `security -i` on stdin
+    /// (as Claude Code does) so the secret never shows in the process list.
+    private static func saveKeychain(_ root: [String: Any]) -> Bool {
+        guard let json = try? JSONSerialization.data(withJSONObject: root, options: [.withoutEscapingSlashes]),
+              let attrs = Focus.output("/usr/bin/security", ["find-generic-password", "-s", keychainService], timeout: 20),
+              let range = attrs.range(of: #""acct"<blob>="[^"\n]*""#, options: .regularExpression) else { return false }
+        let account = String(attrs[range].dropFirst(#""acct"<blob>=""#.count).dropLast())
+        let hex = json.map { String(format: "%02x", $0) }.joined()
+        let line = "add-generic-password -U -a \"\(account)\" -s \"\(keychainService)\" -X \"\(hex)\"\n"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        p.arguments = ["-i"]
+        let input = Pipe()
+        p.standardInput = input
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return false }
+        input.fileHandleForWriting.write(line.data(using: .utf8)!)
+        try? input.fileHandleForWriting.close()
+        p.waitUntilExit()
+        // `security -i` exits 0 even when a command fails, so read the item back to be sure.
+        let saved = Focus.output("/usr/bin/security", ["find-generic-password", "-s", keychainService, "-w"], timeout: 20)
+        return saved.flatMap { $0.data(using: .utf8) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            .flatMap { ($0["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String } == (root["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String
     }
 
     /// Rewrite the wrapper when an update changed it; settings.json already points at it.
@@ -1384,11 +1474,12 @@ enum LimitProvider: String, CaseIterable {
         }
     }
 
-    func read() -> LimitState {
+    /// The limits and, where known, when they were saved (only Claude's sources keep that so far).
+    func read() -> (state: LimitState, asOf: Date?) {
         switch self {
-        case .claude: return UsageLimits.read()
-        case .codex: return CodexLimits.read()
-        case .agy: return AgyLimits.read()
+        case .claude: return UsageLimits.current()
+        case .codex: return (CodexLimits.read(), nil)
+        case .agy: return (AgyLimits.read(), nil)
         }
     }
     /// Off the main thread: may read the Keychain.
@@ -2271,6 +2362,9 @@ final class PetController: NSObject, NSMenuDelegate {
     var lastPrimaryKey = ""
     var expanded = UserDefaults.standard.bool(forKey: "expanded")
     var limitStates: [LimitProvider: LimitState] = [:]
+    /// When each provider's shown limits were saved, set only once they are older than `limitStaleAfter`.
+    var limitStale: [LimitProvider: Date] = [:]
+    let limitStaleAfter: TimeInterval = 30 * 60
     var limitInBubble = false   // the bubble's top row shows the limits, so the bar under the pet stays hidden
     let limitBars = Dictionary(uniqueKeysWithValues: LimitProvider.allCases.map { ($0, LimitBar(frame: .zero)) })
     var showLimits: Bool { showsLimits(.claude) }
@@ -3176,7 +3270,7 @@ final class PetController: NSObject, NSMenuDelegate {
             let name = providers.count > 1 ? p.name : nil
             if case let .data(allWeek, allFive) = state {
                 let (week, five) = shownLimits(allWeek, allFive)
-                bar.text = limitBarText(name: name, week: week, five: five)
+                bar.text = limitBarText(name: name, week: week, five: five, stale: limitStale[p])
                 bar.week = week
                 bar.five = five
             } else {
@@ -3236,7 +3330,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)" : "")
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
-        let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)" }.joined()
+        let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)\(limitStale[$0].map { "~\(Int($0.timeIntervalSince1970))" } ?? "")" }.joined()
         let permitSig = permits.map { p in p.id + "s\(questionStep[p.id] ?? 0)\(questionNudge.contains(p.id))" + (questionPicks[p.id].map { "\($0.sorted { $0.key < $1.key }.map { $0.value })" } ?? "") }.joined(separator: ",")
         return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
@@ -3538,8 +3632,10 @@ final class PetController: NSObject, NSMenuDelegate {
     func pollLimits() {
         let snapshot = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] != nil
         for p in LimitProvider.allCases {
-            let s = showsLimits(p) ? p.read() : .off
+            let (s, asOf) = showsLimits(p) ? p.read() : (.off, nil)
             if s != limitState(p) { limitStates[p] = s }
+            let stale = asOf.flatMap { -$0.timeIntervalSinceNow > limitStaleAfter ? $0 : nil }
+            if stale != limitStale[p] { limitStale[p] = stale }
             // Crossing 90% gets one surprised face per reset cycle.
             guard case let .data(week, five) = s, !snapshot else { continue }
             for (window, win) in [("week", week), ("five", five)] {
@@ -3575,6 +3671,7 @@ final class PetController: NSObject, NSMenuDelegate {
             out.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r))", attributes: label))
         }
         guard out.length > 0 else { return nil }
+        if let d = limitStale[p] { out.append(NSAttributedString(string: "  ·  ข้อมูล \(limitResetText(d))", attributes: label)) }
         if limitProviders.count > 1 {
             out.insert(NSAttributedString(string: p.name + "  ", attributes: [.font: NSFont.boldSystemFont(ofSize: 11), .foregroundColor: theme.secondary]), at: 0)
         }
@@ -3582,7 +3679,7 @@ final class PetController: NSObject, NSMenuDelegate {
     }
 
     /// The label under the pet: the 5-hour window first, since it runs out sooner.
-    func limitBarText(name: String?, week: LimitWindow?, five: LimitWindow?) -> NSAttributedString {
+    func limitBarText(name: String?, week: LimitWindow?, five: LimitWindow?, stale: Date? = nil) -> NSAttributedString {
         let label: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.8)]
         let out = NSMutableAttributedString()
         if let name { out.append(NSAttributedString(string: name + "  ", attributes: [.font: NSFont.boldSystemFont(ofSize: 10), .foregroundColor: NSColor.white])) }
@@ -3596,6 +3693,7 @@ final class PetController: NSObject, NSMenuDelegate {
             out.append(NSAttributedString(string: "\(Int(v.rounded()))%",
                                           attributes: [.font: NSFont.boldSystemFont(ofSize: 10), .foregroundColor: limitBarColor(win.used)]))
         }
+        if let stale { out.append(NSAttributedString(string: "  ·  ข้อมูล \(limitResetText(stale))", attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(white: 1, alpha: 0.55)])) }
         return out
     }
 
@@ -3622,8 +3720,15 @@ final class PetController: NSObject, NSMenuDelegate {
                 var s = "\(name) \(limitsLeft ? "เหลือ" : "ใช้ไป") \(v)%"
                 if let r = win.resetsAt { s += " · รีเซ็ต \(limitResetText(r)) (\(limitCountdown(r)))" }
                 return s
-            }
+            } + limitStaleLines(p)
         }
+    }
+
+    /// Old numbers say so, with what renews them.
+    func limitStaleLines(_ p: LimitProvider) -> [String] {
+        guard let d = limitStale[p] else { return [] }
+        return ["ข้อมูลเมื่อ \(limitResetText(d)) อาจไม่ตรงกับตอนนี้"]
+            + (p == .claude ? ["ถ้ายังไม่อัปเดต: เปิด claude ใน Terminal สักครั้งเพื่อต่ออายุ login"] : [])
     }
 
     func limitTooltip(_ p: LimitProvider) -> String {
@@ -3660,6 +3765,7 @@ final class PetController: NSObject, NSMenuDelegate {
                 if let r = win.resetsAt { line.append(NSAttributedString(string: "  ·  รีเซ็ต \(limitResetText(r)) (\(limitCountdown(r)))", attributes: small)) }
                 items.append(entry(line, indent: 1))
             }
+            items += limitStaleLines(p).map { entry(NSAttributedString(string: $0, attributes: small), indent: 1) }
         }
         return items
     }
@@ -3966,7 +4072,7 @@ struct SettingsPane: View {
 
     func limitSourceText(_ p: LimitProvider) -> String {
         switch p {
-        case .claude: return "อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code) และจาก status line ของ Claude Code"
+        case .claude: return "อ่านจาก usage API ของ Claude ทุก 5 นาที (ใช้ login ของ Claude Code และต่ออายุให้เองเมื่อหมดอายุ) และจาก status line ของ Claude Code"
         case .codex: return "อ่านจาก usage API ของ ChatGPT ทุก 5 นาที (ใช้ login ของ Codex) และจาก log session ล่าสุดของ Codex"
         case .agy: return "อ่านจาก quota API ของ Antigravity ทุก 5 นาที (ใช้ login ของ agy จาก Keychain)"
         }
