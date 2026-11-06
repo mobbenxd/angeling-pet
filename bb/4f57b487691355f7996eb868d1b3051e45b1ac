@@ -1,0 +1,35 @@
+docs/Usage-Limits.md
+  s_dbfd0ffde181b6::t_fceda1511039ce 64-66,71-73
+README.md
+  s_dbfd0ffde181b6::t_fceda1511039ce 151-152
+CLAUDE.md
+  s_dbfd0ffde181b6::t_fceda1511039ce 38
+src/main.swift
+  s_dbfd0ffde181b6::t_4deb0fe62155a9 2365-2367,3333,3635,3637-3638
+  s_dbfd0ffde181b6::t_4ebf4274540d31 1477-1478,1480-1482
+  s_dbfd0ffde181b6::t_a3276eeced99ef 3273,3674,3682,3696,3723,3727-3729,3768
+  s_dbfd0ffde181b6::t_5c56143e469fc6 3730-3731
+  s_dbfd0ffde181b6::t_fceda1511039ce 1052
+  s_dbfd0ffde181b6::t_7921b2cf800d5d 1282-1286,1288-1289,1291,1293-1296,1300-1304,1309-1374,3732
+  s_dbfd0ffde181b6::t_1bc0d34cd45c39 1137-1142,1145-1157
+  s_dbfd0ffde181b6::t_fd3b5a15c678b6 4075
+  s_dbfd0ffde181b6::t_bc01d1ebc00775 1375,3733
+docs/Development.md
+  s_dbfd0ffde181b6::t_fceda1511039ce 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb4f57b487691355f7996eb868d1b3051e45b1ac",
+  "prompts": {},
+  "sessions": {
+    "s_dbfd0ffde181b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9b165f0c-b488-4c29-a2ac-5f4831654301",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
