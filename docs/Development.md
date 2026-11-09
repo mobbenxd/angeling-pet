@@ -115,6 +115,12 @@ swift scripts/import-pet.swift ~/Downloads/unicorn-sheet-fixed.png business-unic
 
 ไฟล์ `unicorn-sheet-fixed.png` คือชีตที่ AI วาดมาแล้วแก้ให้ตรงตาราง: เติมแถว running ที่ขาดด้วยท่ากระโดด ตัดเฟรมที่เกิน และกลับด้านแถวเดินขวา
 
+```bash
+swift scripts/import-pet.swift ~/Downloads/banana-twins.png banana-twins "Banana Twins" "Two pixel-art banana twins in blue striped pyjamas."
+```
+
+ไฟล์ `banana-twins.png` ตัดค่า alpha ให้เป็น 0 หรือ 255 ที่จุด 128 ก่อน เพราะชีตต้นฉบับมีพิกเซลจาง ๆ สีแดงเหลืองเหลือจากการลบพื้นหลัง ซึ่งจะเห็นเป็นขอบเลอะบนพื้นมืด
+
 ทุก Release ต้องแนบไฟล์ครบทุกตัว เพราะ `get.sh` และ `fetch-assets.sh` ดึงจาก `releases/latest`
 
 ทดสอบตัวติดตั้งกับไฟล์ในเครื่อง โดยไม่ยุ่งกับการติดตั้งจริง:
