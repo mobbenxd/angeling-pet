@@ -1458,7 +1458,11 @@ enum LimitProvider: String, CaseIterable {
             case .agy: return ["com.google.antigravity", "com.google.Antigravity"]
             }
         }()
-        let image = apps.lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
+        // A logo file of your own wins: ~/.claude/angeling-pet/icons/<claude|codex|agy>.{pdf,svg,png}.
+        // A flat vector logo stays sharp at chip size, where an app icon's detail turns to mush.
+        let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/angeling-pet/icons")
+        let custom = ["pdf", "svg", "png"].lazy.compactMap { NSImage(contentsOf: dir.appendingPathComponent("\(self.rawValue).\($0)")) }.first
+        let image = custom ?? apps.lazy.compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }.first
             .map { NSWorkspace.shared.icon(forFile: $0.path) } ?? badge
         LimitProvider.icons[self] = image
         return image
@@ -1707,6 +1711,22 @@ final class LimitBar: NSView {
     var style = "both"
     var outline = true
     var barScale = "small"
+    /// "chip" style: the provider's icon and one number in a small pill, laid side by side with the others.
+    var icon: NSImage?
+    var chipUsed: Double?
+    var isChip: Bool { style == "chip" }
+    /// A panel that isn't key shows no tooltips, so a hovered chip widens to show every window itself.
+    var hoverText: NSAttributedString?
+    var onHover: (() -> Void)?
+    private var hovering = false
+    private var chipText: NSAttributedString { hovering ? hoverText ?? text : text }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func mouseEntered(with e: NSEvent) { hovering = true; onHover?() }
+    override func mouseExited(with e: NSEvent) { hovering = false; onHover?() }
     /// Width, week pill, 5-hour pill, and the single pill's height when only one window shows.
     private var dims: (width: CGFloat, week: CGFloat, five: CGFloat, single: CGFloat) {
         switch barScale {
@@ -1720,16 +1740,19 @@ final class LimitBar: NSView {
         return NSSize(width: d.width, height: week != nil && five != nil ? d.week + 2 + d.five : d.single)
     }
     /// No numbers yet (waiting / no data): only the label, which says so.
-    var hasBar: Bool { style != "text" && (week != nil || five != nil) }
+    var hasBar: Bool { style != "text" && !isChip && (week != nil || five != nil) }
     var hasText: Bool { style != "bar" || !hasBar }
     var textSize: NSSize { NSSize(width: ceil(text.size().width) + 12, height: 16) }
+    private let chipIcon: CGFloat = 16
     var size: NSSize {
+        if isChip { return NSSize(width: ceil(chipText.size().width) + (icon == nil ? 12 : chipIcon + 13), height: 20) }
         let t = hasText ? textSize : .zero
         let b = hasBar ? barSize : .zero
         return NSSize(width: max(t.width, b.width), height: t.height + b.height + (hasBar && hasText ? 3 : 0))
     }
     override func draw(_ dirtyRect: NSRect) {
         let sz = size
+        if isChip { drawChip(NSRect(origin: .zero, size: sz)); return }
         if hasBar {
             let b = barSize
             drawBar(NSRect(x: round((sz.width - b.width) / 2), y: sz.height - b.height, width: b.width, height: b.height))
@@ -1743,6 +1766,32 @@ final class LimitBar: NSView {
             text.draw(at: NSPoint(x: r.minX + round((r.width - ts.width) / 2), y: round((r.height - ts.height) / 2)))
         }
     }
+    private func drawChip(_ r: NSRect) {
+        // Dark like the label; tinted orange / red once the window is past 60% / 85% used.
+        let used = chipUsed ?? 0
+        (used < 60 ? NSColor(white: 0, alpha: 0.55)
+            : used <= 85 ? NSColor(calibratedRed: 0.55, green: 0.3, blue: 0.05, alpha: 0.85)
+            : NSColor(calibratedRed: 0.55, green: 0.1, blue: 0.12, alpha: 0.85)).setFill()
+        NSBezierPath(roundedRect: r, xRadius: r.height / 2, yRadius: r.height / 2).fill()
+        var x: CGFloat = 6
+        if let icon {
+            // Exactly 16 pt on whole pixels: macOS app icons have a hand-tuned 16 px (and 32 px @2x) version,
+            // which stays sharp; any other size, or a half-pixel offset, gets resampled and looks blurry.
+            let dest = NSRect(x: 3, y: floor((r.height - chipIcon) / 2), width: chipIcon, height: chipIcon)
+            var proposed = dest
+            let ctx = NSGraphicsContext.current
+            if let cg = icon.cgImage(forProposedRect: &proposed, context: ctx, hints: nil), let c = ctx?.cgContext {
+                c.interpolationQuality = .high
+                c.draw(cg, in: dest)
+            } else {
+                icon.draw(in: dest)
+            }
+            x = 3 + chipIcon + 4
+        }
+        let t = chipText, ts = t.size()
+        t.draw(at: NSPoint(x: x, y: round((r.height - ts.height) / 2)))
+    }
+
     private func drawBar(_ r: NSRect) {
         // One pill per window: a dark track with a light outline, filled in the window's colour.
         func pill(_ w: LimitWindow?, y: CGFloat, h: CGFloat) {
@@ -2385,7 +2434,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func limitState(_ p: LimitProvider) -> LimitState { limitStates[p] ?? .off }
     var limitsLeft: Bool { (ProcessInfo.processInfo.environment["ANGELING_LIMIT_MODE"] ?? d.string(forKey: "limitMode")) == "left" }
     /// Where the limits show: "auto" (the bubble's top row, or the bar while that row isn't showing), "both", or "bar".
-    /// What sits under the pet: "both" (power bar and numbers), "bar", or "text".
+    /// What sits under the pet: "both" (power bar and numbers), "bar", "text", or "chip" (icon and one number per provider, side by side).
     /// Whether the power bar's pills have a light outline.
     /// How big the power bar is: "small", "medium" or "large".
     var limitBarScale: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_SIZE"] ?? d.string(forKey: "limitBarScale") ?? "small" }
@@ -2495,6 +2544,7 @@ final class PetController: NSObject, NSMenuDelegate {
         for p in LimitProvider.allCases {
             content.addSubview(limitBars[p]!)
             limitBars[p]!.isHidden = true
+            limitBars[p]!.onHover = { [weak self] in self?.refresh() }
         }
         if d.bool(forKey: "showLimits") { UsageLimits.refreshWrapper() }
         pollLimits()
@@ -3283,8 +3333,25 @@ final class PetController: NSObject, NSMenuDelegate {
             bar.remaining = limitsLeft
             bar.week = nil
             bar.five = nil
+            bar.icon = nil
+            bar.chipUsed = nil
+            bar.hoverText = nil
             let name = providers.count > 1 ? p.name : nil
-            if case let .data(allWeek, allFive) = state {
+            if limitStyle == "chip" {
+                // Icon and one number: the 5-hour window when it shows (it runs out sooner); the rest is in the tooltip.
+                bar.icon = p.icon
+                var label = "…"
+                if case let .data(allWeek, allFive) = state {
+                    bar.hoverText = limitBarText(name: nil, week: allWeek, five: allFive, stale: limitStale[p])
+                    let (week, five) = shownLimits(allWeek, allFive)
+                    if let win = five ?? week {
+                        label = "\(Int((limitsLeft ? 100 - win.used : win.used).rounded()))"
+                        bar.chipUsed = win.used
+                    }
+                }
+                bar.text = NSAttributedString(string: label, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .bold),
+                                                                          .foregroundColor: bar.chipUsed.map { $0 < 60 ? NSColor.white : limitBarColor($0) } ?? NSColor(white: 1, alpha: 0.7)])
+            } else if case let .data(allWeek, allFive) = state {
                 let (week, five) = shownLimits(allWeek, allFive)
                 bar.text = limitBarText(name: name, week: week, five: five, stale: limitStale[p])
                 bar.week = week
@@ -3298,7 +3365,9 @@ final class PetController: NSObject, NSMenuDelegate {
             bar.needsDisplay = true
         }
         let barGap: CGFloat = 4
-        let barsHeight = shownBars.reduce(0) { $0 + $1.size.height } + barGap * CGFloat(max(shownBars.count - 1, 0))
+        let chips = limitStyle == "chip"   // chips sit side by side; the other styles stack
+        let barsHeight = chips ? shownBars.map { $0.size.height }.max() ?? 0
+            : shownBars.reduce(0) { $0 + $1.size.height } + barGap * CGFloat(max(shownBars.count - 1, 0))
         let petBase: CGFloat = shownBars.isEmpty ? 0 : barsHeight + 2
 
         // Emote floats above the head (like in RO); the bubble moves up to make room for it.
@@ -3318,11 +3387,21 @@ final class PetController: NSObject, NSMenuDelegate {
         }
         keepOnScreen()
         pet.frame = NSRect(x: (winWidth - petSize.width) / 2, y: petBase, width: petSize.width, height: petSize.height)
-        var barY: CGFloat = 1
-        for bar in shownBars.reversed() {
-            let sz = bar.size
-            bar.frame = NSRect(x: round((winWidth - sz.width) / 2), y: barY, width: sz.width, height: sz.height)
-            barY += sz.height + barGap
+        if chips {
+            let total = shownBars.reduce(0) { $0 + $1.size.width } + barGap * CGFloat(max(shownBars.count - 1, 0))
+            var x = round((winWidth - total) / 2)
+            for bar in shownBars {
+                let sz = bar.size
+                bar.frame = NSRect(x: x, y: 1, width: sz.width, height: sz.height)
+                x += sz.width + barGap
+            }
+        } else {
+            var barY: CGFloat = 1
+            for bar in shownBars.reversed() {
+                let sz = bar.size
+                bar.frame = NSRect(x: round((winWidth - sz.width) / 2), y: barY, width: sz.width, height: sz.height)
+                barY += sz.height + barGap
+            }
         }
         badge.frame = NSRect(x: pet.frame.maxX - 16, y: pet.frame.maxY - 22, width: 18, height: 18)
         // Collapsed lists leave LINE and Discord out, so their counts go on the pet.
@@ -4048,6 +4127,7 @@ struct SettingsPane: View {
                     Text("หลอดพลังและตัวเลข").tag("both")
                     Text("หลอดพลังอย่างเดียว").tag("bar")
                     Text("ตัวเลขอย่างเดียว").tag("text")
+                    Text("ไอคอนและตัวเลข (กระชับ)").tag("chip")
                 }
                 Picker("limit ที่แสดง", selection: m.bind({ c.limitWindows }, { c.setLimitWindows($0) })) {
                     Text("5 ชม. และสัปดาห์").tag("both")
@@ -4059,9 +4139,9 @@ struct SettingsPane: View {
                     Text("กลาง").tag("medium")
                     Text("ใหญ่").tag("large")
                 }
-                .disabled(c.limitStyle == "text")
+                .disabled(c.limitStyle == "text" || c.limitStyle == "chip")
                 Toggle("ขอบหลอดพลัง", isOn: m.bind({ c.limitOutline }, { c.setLimitOutline($0) }))
-                    .disabled(c.limitStyle == "text")
+                    .disabled(c.limitStyle == "text" || c.limitStyle == "chip")
             }
             .disabled(c.limitProviders.isEmpty)
         case .updates:
