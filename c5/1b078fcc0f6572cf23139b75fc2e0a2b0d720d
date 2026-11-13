@@ -1,0 +1,31 @@
+README.md
+  s_b8fc807f83598f::t_e1ff9f32f2fa4c 62
+docs/Usage-Limits.md
+  s_b8fc807f83598f::t_a74a09fbfefff2 55
+  s_b8fc807f83598f::t_e1ff9f32f2fa4c 26,47,49,71
+src/main.swift
+  s_b8fc807f83598f::t_b7f99de79a8554 3786,3833,3905
+  s_b8fc807f83598f::t_14cfa1ed27f35b 1902-1903
+  s_b8fc807f83598f::t_8b42da91d617d6 3382,3384,3392-3402,3404,3801
+  s_b8fc807f83598f::t_5fc08a70647429 3805
+  s_b8fc807f83598f::t_47898b0138e3ae 3807,3814
+  s_b8fc807f83598f::t_9fb1ffbf33aa91 1074-1079,1082,1089,1091,1177,1184-1185,1196-1197,1199-1201,1214-1217,1269-1270,1274-1275,1279,1281-1292,1735-1736,1767-1773,1776,1851-1857,1859,3373,3383,3385,3403,3405,3408,3785,3798,3816,3828,3862-3863,3901
+docs/Development.md
+  s_b8fc807f83598f::t_e1ff9f32f2fa4c 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c51b078fcc0f6572cf23139b75fc2e0a2b0d720d",
+  "prompts": {},
+  "sessions": {
+    "s_b8fc807f83598f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "871dfa1c-65eb-436d-8fa3-06328385a70c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
