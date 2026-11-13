@@ -1,0 +1,29 @@
+docs/Development.md
+  s_b8fc807f83598f::t_4424b1c0fc6491 47
+README.md
+  s_b8fc807f83598f::t_4424b1c0fc6491 62
+docs/Usage-Limits.md
+  s_b8fc807f83598f::t_4424b1c0fc6491 55-56
+src/main.swift
+  s_b8fc807f83598f::t_4424b1c0fc6491 2479-2480,3782-3783,3967-3972,4171-4173
+CLAUDE.md
+  s_b8fc807f83598f::t_4424b1c0fc6491 38
+docs/Usage.md
+  s_b8fc807f83598f::t_4424b1c0fc6491 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e44c93b4c677bf6e367fbcc81a4810ef9f658646",
+  "prompts": {},
+  "sessions": {
+    "s_b8fc807f83598f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "871dfa1c-65eb-436d-8fa3-06328385a70c",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
