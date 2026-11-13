@@ -2476,6 +2476,8 @@ final class PetController: NSObject, NSMenuDelegate {
     /// How big the power bar is: "small", "medium" or "large".
     var limitBarScale: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_SIZE"] ?? d.string(forKey: "limitBarScale") ?? "small" }
     var limitOutline: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMIT_OUTLINE"].map { $0 != "0" } ?? (d.object(forKey: "limitOutline") as? Bool ?? true) }
+    /// Whether a model's own weekly limit (Fable) shows at all. Off drops it everywhere, the 90% face included.
+    var limitModels: Bool { ProcessInfo.processInfo.environment["ANGELING_LIMIT_MODELS"].map { $0 != "0" } ?? (d.object(forKey: "limitModels") as? Bool ?? true) }
     /// Which windows the bubble row and the bar / label show: "both", "five" or "week".
     var limitWindows: String { ProcessInfo.processInfo.environment["ANGELING_LIMIT_WINDOWS"] ?? d.string(forKey: "limitWindows") ?? "both" }
     /// The windows to show; when the chosen one doesn't exist for this account, whatever does.
@@ -3777,7 +3779,8 @@ final class PetController: NSObject, NSMenuDelegate {
     func pollLimits() {
         let snapshot = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] != nil
         for p in LimitProvider.allCases {
-            let (s, asOf) = showsLimits(p) ? p.read() : (.off, nil)
+            var (s, asOf) = showsLimits(p) ? p.read() : (.off, nil)
+            if !limitModels, case let .data(week, five, _) = s { s = week == nil && five == nil ? .noData : .data(week: week, five: five) }
             if s != limitState(p) { limitStates[p] = s }
             let stale = asOf.flatMap { -$0.timeIntervalSinceNow > limitStaleAfter ? $0 : nil }
             if stale != limitStale[p] { limitStale[p] = stale }
@@ -3958,6 +3961,12 @@ final class PetController: NSObject, NSMenuDelegate {
 
     func setLimitBarScale(_ id: String) {
         d.set(id, forKey: "limitBarScale")
+        refresh()
+    }
+
+    func setLimitModels(_ on: Bool) {
+        d.set(on, forKey: "limitModels")
+        pollLimits()
         refresh()
     }
 
@@ -4159,6 +4168,9 @@ struct SettingsPane: View {
                     }
                     if c.showsLimits(p) {
                         ForEach(c.limitMenuLines(p), id: \.self) { Text($0).foregroundStyle(.secondary) }
+                        if p == .claude {
+                            Toggle("แสดง limit ของ Fable", isOn: m.bind({ c.limitModels }, { c.setLimitModels($0) }))
+                        }
                     }
                 } footer: {
                     Text(limitSourceText(p)).font(.caption).foregroundStyle(.secondary)
