@@ -1164,6 +1164,19 @@ enum MeetingWatch {
     }
 }
 
+// MARK: - Breaks (rest and water nudges)
+//   Counts how long you have been at the Mac without a real pause, from the system's idle time
+//   (seconds since the last key press or mouse move; needs no permission). Both nudges are off
+//   until turned on in the settings.
+
+enum BreakWatch {
+    /// Seconds since the last keyboard or mouse input.
+    static func idleSeconds() -> Double {
+        CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+    }
+    static let dayStamp: DateFormatter = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f }()
+}
+
 // MARK: - Usage limits (Claude's, Codex's and AGY's 5-hour and weekly rate limits)
 // Two sources, each with its own file in the status line's shape:
 // - limits-api.json: Claude's usage API (what /usage shows), every 5 minutes, with Claude Code's own login token
@@ -2528,6 +2541,12 @@ final class PetController: NSObject, NSMenuDelegate {
     var meetings: [Meeting] = []
     var meetingDismissed = Set<String>()  // rows hidden by hand, or joined
     var meetingAlerted = Set<String>()
+    var workStart = Date().timeIntervalSince1970  // when this stretch of work began
+    var breakDue = false
+    var breakSnoozedUntil: Double = 0
+    var lastWater = Date().timeIntervalSince1970
+    var waterDue = false
+    var lastBreakTick = Date().timeIntervalSince1970
     lazy var reminderForm: ReminderForm = {
         let f = ReminderForm(store: reminders)
         f.onSaved = { [weak self] in self?.setOverride("waving", for: 1.2); self?.showEmote("heh", for: 2.5); self?.refresh() }
@@ -2619,6 +2638,14 @@ final class PetController: NSObject, NSMenuDelegate {
     var showLine: Bool { flag("showLine") }
     var showDiscord: Bool { flag("showDiscord") }
     var showMeetings: Bool { flag("showMeetings") }
+    var breakReminders: Bool { d.bool(forKey: "breakReminders") }
+    /// Minutes of work before the nudge, and minutes away from the Mac that count as a break.
+    var breakEvery: Int { d.object(forKey: "breakEvery") as? Int ?? 50 }
+    var breakLength: Int { d.object(forKey: "breakLength") as? Int ?? 5 }
+    var waterReminders: Bool { d.bool(forKey: "waterReminders") }
+    var waterEvery: Int { d.object(forKey: "waterEvery") as? Int ?? 60 }
+    /// Glasses clicked off today.
+    var waterToday: Int { d.string(forKey: "waterDay") == BreakWatch.dayStamp.string(from: Date()) ? d.integer(forKey: "waterCount") : 0 }
     /// Minutes before an event's start that its row appears.
     var meetingLead: Int { d.object(forKey: "meetingLead") as? Int ?? 15 }
 
@@ -3188,6 +3215,127 @@ final class PetController: NSObject, NSMenuDelegate {
         return dueMeetings(now, soonOnly: soonOnly).map { "M\($0.id)\($0.title)\(meetingCountdown($0, now))\($0.start - now <= 60)\($0.service ?? "")\(Int($0.end))" }.joined()
     }
 
+    // MARK: breaks
+
+    func inMeeting(_ now: Double) -> Bool { meetings.contains { $0.start <= now && now < $0.end } }
+    func workedMinutes(_ now: Double) -> Int { max(0, Int((now - workStart) / 60)) }
+
+    /// Follows the idle time: a pause of `breakLength` minutes (or the Mac asleep that long) starts
+    /// a new stretch of work; `breakEvery` minutes without one brings the nudge. Nothing nudges
+    /// during a meeting; it waits for the meeting to end.
+    func checkBreaks(_ now: Double) {
+        let env = ProcessInfo.processInfo.environment
+        // Debug: ANGELING_BREAK=55 shows the break row after 55 minutes of work, ANGELING_WATER=1 the water row.
+        if let fake = env["ANGELING_BREAK"].flatMap(Double.init) { workStart = now - fake * 60; breakDue = true }
+        if env["ANGELING_WATER"] != nil { waterDue = true }
+        guard !Self.snapshotRun else { return }
+        let idle = BreakWatch.idleSeconds()
+        let rested = idle >= Double(breakLength * 60) || now - lastBreakTick >= Double(breakLength * 60)
+        lastBreakTick = now
+        if rested || !breakReminders {
+            workStart = now
+            breakDue = false
+        } else if !breakDue && now - workStart >= Double(breakEvery * 60) && now >= breakSnoozedUntil && !inMeeting(now) {
+            breakDue = true
+            nudge(emote: "swt", sound: true)
+        }
+        if !waterReminders {
+            lastWater = now
+            waterDue = false
+        } else if !waterDue && now - lastWater >= Double(waterEvery * 60) && idle < 60 && !inMeeting(now) {
+            waterDue = true
+            nudge(emote: "slur", sound: false)
+        }
+    }
+
+    func nudge(emote: String, sound: Bool) {
+        if petHidden { petHidden = false; panel.orderFrontRegardless() }
+        setOverride("waving", for: 1.5)
+        showEmote(emote, for: 4)
+        if sound { chime(1) }
+    }
+
+    @objc func breakDone() {
+        workStart = Date().timeIntervalSince1970
+        breakDue = false
+        setOverride("jumping", for: 1)
+        showEmote("lv", for: 2.5)
+        refresh()
+    }
+    @objc func breakSnooze(_ sender: NSMenuItem) {
+        guard let mins = sender.representedObject as? Int else { return }
+        breakSnoozedUntil = Date().timeIntervalSince1970 + Double(mins * 60)
+        breakDue = false
+        refresh()
+    }
+    @objc func waterDone() {
+        let today = BreakWatch.dayStamp.string(from: Date())
+        d.set(waterToday + 1, forKey: "waterCount")
+        d.set(today, forKey: "waterDay")
+        lastWater = Date().timeIntervalSince1970
+        waterDue = false
+        showEmote("heh", for: 2.5)
+        refresh()
+    }
+    @objc func waterSnooze(_ sender: NSMenuItem) {
+        guard let mins = sender.representedObject as? Int else { return }
+        lastWater = Date().timeIntervalSince1970 - Double((waterEvery - mins) * 60)
+        waterDue = false
+        refresh()
+    }
+    @objc func toggleBreakReminders() { d.set(!breakReminders, forKey: "breakReminders"); refresh() }
+    @objc func toggleWaterReminders() { d.set(!waterReminders, forKey: "waterReminders"); refresh() }
+
+    /// The rest nudge and the water nudge; each stays until clicked (the rest one also goes once you have rested).
+    func breakRows(width w: CGFloat) -> [RowView] {
+        let now = Date().timeIntervalSince1970
+        var rows: [RowView] = []
+        func menu(_ row: RowView, _ event: NSEvent, done: (String, Selector), snooze: Selector, off: (String, Selector)) {
+            let m = NSMenu()
+            m.addItem(withTitle: done.0, action: done.1, keyEquivalent: "").target = self
+            for mins in [5, 10, 15] {
+                let i = m.addItem(withTitle: "เตือนอีกครั้งใน \(mins) นาที", action: snooze, keyEquivalent: "")
+                i.target = self
+                i.representedObject = mins
+            }
+            m.addItem(.separator())
+            m.addItem(withTitle: off.0, action: off.1, keyEquivalent: "").target = self
+            NSMenu.popUpContextMenu(m, with: event, for: row)
+        }
+        if breakDue {
+            let t = rowHeader(icon: "☕", title: "พักสักหน่อยนะ", titleColor: theme.alarm, dot: theme.alarm,
+                              status: "ทำงานมา \(workedMinutes(now)) นาที", statusColor: theme.secondary, width: w)
+            t.append(rowLine("ลุกยืดเส้น พักสายตาสัก \(breakLength) นาที", size: 13, bold: true))
+            t.append(rowLine("คลิกเมื่อพักแล้ว · คลิกขวาเพื่อเลื่อน", size: 11, color: theme.secondary))
+            let row = RowView(text: t, width: w, clickable: true)
+            row.accent = theme.alarm
+            row.onClick = { [weak self] in self?.breakDone() }
+            row.onRightClick = { e in
+                menu(row, e, done: ("พักแล้ว ✓", #selector(PetController.breakDone)), snooze: #selector(PetController.breakSnooze(_:)),
+                     off: ("ปิดการเตือนให้พัก", #selector(PetController.toggleBreakReminders)))
+            }
+            rows.append(row)
+        }
+        if waterDue {
+            let t = rowHeader(icon: "💧", title: "ดื่มน้ำหน่อยนะ", titleColor: theme.running, dot: theme.running,
+                              status: "วันนี้ \(waterToday) แก้ว", statusColor: theme.secondary, width: w)
+            t.append(rowLine("คลิกเมื่อดื่มแล้ว · คลิกขวาเพื่อเลื่อน", size: 11, color: theme.secondary))
+            let row = RowView(text: t, width: w, clickable: true)
+            row.accent = theme.running
+            row.onClick = { [weak self] in self?.waterDone() }
+            row.onRightClick = { e in
+                menu(row, e, done: ("ดื่มแล้ว ✓", #selector(PetController.waterDone)), snooze: #selector(PetController.waterSnooze(_:)),
+                     off: ("ปิดการเตือนให้ดื่มน้ำ", #selector(PetController.toggleWaterReminders)))
+            }
+            rows.append(row)
+        }
+        return rows
+    }
+
+    func breakSignature() -> String {
+        (breakDue ? "B\(workedMinutes(Date().timeIntervalSince1970))\(breakLength)" : "") + (waterDue ? "W\(waterToday)" : "")
+    }
+
     // MARK: themed row text
 
     /// A row's first line. Minimal themes: "● title ⇥ status" with the status right-aligned;
@@ -3433,6 +3581,7 @@ final class PetController: NSObject, NSMenuDelegate {
             }
             m.addItem(withTitle: "📅 นัดถัดไป (\(next.count))", action: nil, keyEquivalent: "").submenu = agenda
         }
+        if breakReminders { item("☕ พักแล้ว (ทำงานมา \(workedMinutes(now)) จาก \(breakEvery) นาที)", #selector(breakDone)) }
         m.addItem(.separator())
         if !forStatusBar { item("ซ่อน Angeling (⌥⌘A)", #selector(togglePet)) }
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
@@ -3546,6 +3695,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let primary = live.first
         checkReminders(now)
         checkMeetings(now)
+        checkBreaks(now)
 
         // A tucked-away Angeling pops back out when a session starts waiting on you.
         let newlyWaiting = live.contains { $0.1 == "waiting" && !previouslyWaiting.contains($0.0.session ?? "") }
@@ -3653,11 +3803,12 @@ final class PetController: NSObject, NSMenuDelegate {
         // A hidden bubble still shows ringing reminders and, unless turned off, sessions that need you.
         let waiting = live.filter { $0.1 == "waiting" }
         let urgent = popWhenWaiting ? waiting : []
-        let sig = activityHidden ? "hidden|" + reminderSignature() + "|" + meetingSignature(soonOnly: true) + "|" + rowsSignature(urgent) : rowsSignature(live)
+        let sig = activityHidden ? "hidden|" + reminderSignature() + "|" + meetingSignature(soonOnly: true) + breakSignature() + "|" + rowsSignature(urgent) : rowsSignature(live)
         if sig != lastRowsSig {
             lastRowsSig = sig
             let rows = activityHidden ? reminderRows(width: winWidth - bubble.pad * 2, ringingOnly: true)
-                                        + meetingRows(width: winWidth - bubble.pad * 2, soonOnly: true) + makeRows(urgent, urgentOnly: true)
+                                        + meetingRows(width: winWidth - bubble.pad * 2, soonOnly: true) + breakRows(width: winWidth - bubble.pad * 2)
+                                        + makeRows(urgent, urgentOnly: true)
                                       : makeRows(live)
             bubbleSize = rows.isEmpty ? .zero : bubble.set(rows: rows, width: winWidth)
         }
@@ -3795,7 +3946,7 @@ final class PetController: NSObject, NSMenuDelegate {
             + (discordVisible ? "|D\(discordUnread)" : "")
         let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)\(limitStale[$0].map { "~\(Int($0.timeIntervalSince1970))" } ?? "")" }.joined()
         let permitSig = permits.map { p in p.id + "s\(questionStep[p.id] ?? 0)\(questionNudge.contains(p.id))" + (questionPicks[p.id].map { "\($0.sorted { $0.key < $1.key }.map { $0.value })" } ?? "") }.joined(separator: ",")
-        return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|\(meetingSignature())|" + live.map { s, st in
+        return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|\(meetingSignature())\(breakSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -4036,7 +4187,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if expanded {
             // Sessions that need you go above everything else, every one of them.
             var rows = permitRows + waiting.map { sessionRow($0.0, $0.1, detailed: true) }
-                + reminderRows(width: w) + meetingRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (whatsNew != nil ? [whatsNewRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
+                + reminderRows(width: w) + meetingRows(width: w) + breakRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (whatsNew != nil ? [whatsNewRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
                 + live.filter { $0.1 != "waiting" }.map { sessionRow($0.0, $0.1, detailed: true) }
             if rows.isEmpty { rows = [RowView(text: NSAttributedString(string: "ยังไม่มีงานที่กำลังทำ~", attributes: normal), width: w, clickable: false)] }
             return withHeader(rows)
@@ -4049,6 +4200,7 @@ final class PetController: NSObject, NSMenuDelegate {
         ranked += live.filter { $0.1 == "failed" }.map { (sessionRow($0.0, $0.1, detailed: false), false) }
         ranked += reminderRows(width: w).map { ($0, false) }
         ranked += meetingRows(width: w).map { ($0, false) }
+        ranked += breakRows(width: w).map { ($0, false) }
         if updateAvailable { ranked.append((updateRow(width: w), false)) }
         if whatsNew != nil { ranked.append((whatsNewRow(width: w), false)) }
         ranked += live.filter { ["running", "review"].contains($0.1) }.map { (sessionRow($0.0, $0.1, detailed: false), false) }
@@ -4346,7 +4498,7 @@ enum SettingsTab: String, CaseIterable {
         switch self {
         case .general: return 450
         case .look: return 560
-        case .alerts: return 500
+        case .alerts: return 690
         case .limits: return 720
         case .updates: return 330
         }
@@ -4506,6 +4658,28 @@ struct SettingsPane: View {
                 Text("นัดจากปฏิทิน")
             } footer: {
                 Text("คลิกแถวนัดเพื่อเข้าประชุม (Zoom, Google Meet, Teams ฯลฯ) ก่อนเริ่ม 1 นาที Angeling จะโผล่มาเตือน ใช้สิทธิ์ปฏิทินเดียวกับการเตือน")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("เตือนให้พัก", isOn: m.bind({ c.breakReminders }, { if $0 != c.breakReminders { c.toggleBreakReminders() } }))
+                if c.breakReminders {
+                    Picker("เมื่อทำงานต่อเนื่อง", selection: m.bind({ c.breakEvery }, { c.d.set($0, forKey: "breakEvery") })) {
+                        ForEach([25, 30, 45, 50, 60, 90], id: \.self) { Text("\($0) นาที").tag($0) }
+                    }
+                    Picker("นับว่าพักเมื่อไม่แตะเครื่อง", selection: m.bind({ c.breakLength }, { c.d.set($0, forKey: "breakLength") })) {
+                        ForEach([3, 5, 10, 15], id: \.self) { Text("\($0) นาที").tag($0) }
+                    }
+                }
+                Toggle("เตือนให้ดื่มน้ำ", isOn: m.bind({ c.waterReminders }, { if $0 != c.waterReminders { c.toggleWaterReminders() } }))
+                if c.waterReminders {
+                    Picker("ทุก", selection: m.bind({ c.waterEvery }, { c.d.set($0, forKey: "waterEvery") })) {
+                        ForEach([30, 45, 60, 90, 120], id: \.self) { Text("\($0) นาที").tag($0) }
+                    }
+                }
+            } header: {
+                Text("พักและดื่มน้ำ")
+            } footer: {
+                Text("นับเวลาจากการใช้คีย์บอร์ดและเมาส์ (ไม่ต้องขอสิทธิ์เพิ่ม) เตือนให้พักมีเสียง เตือนดื่มน้ำไม่มีเสียง และไม่เตือนระหว่างนัดในปฏิทิน")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("การเตือน") {
