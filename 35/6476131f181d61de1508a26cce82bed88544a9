@@ -1,0 +1,34 @@
+README.md
+  s_7a61dd736ef877::t_8ead4db54fb3fb 47,81
+docs/Usage.md
+  s_7a61dd736ef877::t_8ead4db54fb3fb 77
+docs/README.md
+  s_7a61dd736ef877::t_8ead4db54fb3fb 6,38
+CLAUDE.md
+  s_7a61dd736ef877::t_8ead4db54fb3fb 3,9,39
+src/main.swift
+  s_7a61dd736ef877::t_0622617d8aeba2 3313,3326
+  s_7a61dd736ef877::t_1193013d56e117 4501
+  s_7a61dd736ef877::t_03d8090c38e267 1167-1179,2544-2549,2641-2648,3218-3312,3314-3325,3327-3338,3584,3698,3806,3810-3811,3949,4190,4203,4663-4682,4684
+  s_7a61dd736ef877::t_a0442e169e1c88 4683
+docs/Development.md
+  s_7a61dd736ef877::t_8ead4db54fb3fb 64-65
+docs/Breaks.md
+  s_7a61dd736ef877::t_8ead4db54fb3fb 1-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "356476131f181d61de1508a26cce82bed88544a9",
+  "prompts": {},
+  "sessions": {
+    "s_7a61dd736ef877": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "51650e3b-3a23-481a-a5d4-f73ecb2c9098",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
