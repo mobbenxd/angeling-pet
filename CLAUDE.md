@@ -1,12 +1,12 @@
 # Angeling Pet
 
-A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session status, rings reminders that it also adds to Calendar, shows the next Calendar meeting with a click to join, and shows unread counts for LINE and Discord. Distributed through GitHub Releases with a one-line installer.
+A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session status, rings reminders that it also adds to Calendar, shows the next Calendar meeting with a click to join, nudges you to rest and drink water, and shows unread counts for LINE and Discord. Distributed through GitHub Releases with a one-line installer.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, permission prompts, Focus (jump to window), LINE, Discord, Updates, Reminders, Meetings (next Calendar events, read-only), usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys (⌥⌘A/⌥⌘R always; ⌥⌘Y/⌥⌘N/⌥⌘1–4 only while a permission request waits), app entry plus debug modes |
+| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, permission prompts, Focus (jump to window), LINE, Discord, Updates, Reminders, Meetings (next Calendar events, read-only), Breaks (rest and water nudges from idle time), usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys (⌥⌘A/⌥⌘R always; ⌥⌘Y/⌥⌘N/⌥⌘1–4 only while a permission request waits), app entry plus debug modes |
 | `hooks/angeling-hook.sh` | Claude Code hook (11 events). Writes `~/.claude/angeling-pet/state/<session>.json`, with a per-session mkdir lock and mktemp+mv writes |
 | `hooks/angeling-permit.sh` | `PermissionRequest` hook (installed as `permit.sh`, timeout 600). Writes `permits/<id>.json`, waits for the app's `permits/<id>.answer` (allow/always/deny, or a JSON answers object for AskUserQuestion, sent back as `updatedInput.answers`); exits at once unless `permits/enabled` exists and Angeling runs (and for AskUserQuestion when `permits/no-questions` exists). Claude Code's own prompt shows meanwhile; answering it there usually SIGTERMs the hook, and otherwise the hook sees the tool's result in the transcript and exits |
 | `install.sh` / `uninstall.sh` | Installer: prebuilt app from a bundle, or builds from source. The Claude hook is optional |
@@ -36,7 +36,7 @@ ANGELING_SNAPSHOT=/path/out.png build/Angeling.app/Contents/MacOS/Angeling
 
 Fakes for snapshots are listed in `docs/Development.md`:
 - `ANGELING_EXPANDED`, `ANGELING_LIMITS`, `ANGELING_LIMIT_AGE`, `ANGELING_CODEX_LIMITS`, `ANGELING_AGY_LIMITS`, `ANGELING_LIMIT_MODE`, `ANGELING_LIMIT_PLACE`, `ANGELING_LIMIT_STYLE`, `ANGELING_LIMIT_WINDOWS`, `ANGELING_LIMIT_SIZE`, `ANGELING_LIMIT_OUTLINE`, `ANGELING_LIMIT_MODELS`, `ANGELING_HIDE_ACTIVITY`, `ANGELING_HOVER`, `ANGELING_EMOTE`, `ANGELING_FORM`, `ANGELING_SETTINGS`, `ANGELING_SETTINGS_HEIGHT`, `ANGELING_TEAMS_GUIDE`, `ANGELING_MENU`
-- `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_MEETINGS`, `ANGELING_STATE_DIR`, `ANGELING_PERMIT_DIR`, `ANGELING_PERMIT_STEP`, `ANGELING_THEME`
+- `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_MEETINGS`, `ANGELING_BREAK`, `ANGELING_WATER`, `ANGELING_STATE_DIR`, `ANGELING_PERMIT_DIR`, `ANGELING_PERMIT_STEP`, `ANGELING_THEME`
 - `ANGELING_CHARACTER`, `ANGELING_ANIM`
 - `ANGELING_FAKE_VERSION`, `ANGELING_LATEST_VERSION`, `ANGELING_RELEASE_NOTES`, `ANGELING_WHATS_NEW`, `ANGELING_UPDATE_NOW`, `ANGELING_UPDATE_CMD`
 
