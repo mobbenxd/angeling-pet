@@ -1,0 +1,49 @@
+src/main.swift
+  s_7a61dd736ef877::t_10ec5d63516a96 1099-1166
+  s_7a61dd736ef877::t_e3b1d5c0c25eb8 764-765,819-855,2542,2546,2549,2745,2786,2830-2835,2840-2847,2853-2889,2899,3792-3793,4039,4053,4351,4578-4583
+  s_7a61dd736ef877::t_f6cc27c173eed8 2528-2530,2621-2623,2744,2746-2748,2751,3087-3190,3420-3435,3548,3656,3659-3660,3798,4051,4470-4474,4503-4510
+  s_7a61dd736ef877::t_c75eae4e5aab02 2540-2541,2543-2545,2547-2548,2836-2839,2848-2852
+  s_7a61dd736ef877::t_21938109ec5364 2810-2812
+  s_7a61dd736ef877::t_c9edc0754011b3 4349
+  s_7a61dd736ef877::t_f8d13247f618f9 934
+  s_7a61dd736ef877::t_d4532966202c9f 4344-4345
+  s_7a61dd736ef877::t_3eec39d8e4d15e 891-892
+  s_7a61dd736ef877::t_2fe43b4ef1a15a 4360-4361,4475-4502
+docs/README.md
+  s_7a61dd736ef877::t_735e909a3141fa 5,36
+CLAUDE.md
+  s_7a61dd736ef877::t_8c6b0f235b2e2a 41,58-59
+  s_7a61dd736ef877::t_735e909a3141fa 3,9,39
+  s_7a61dd736ef877::t_c9edc0754011b3 38
+docs/Usage.md
+  s_7a61dd736ef877::t_735e909a3141fa 60,77
+docs/Development.md
+  s_7a61dd736ef877::t_c9edc0754011b3 62-63
+  s_7a61dd736ef877::t_735e909a3141fa 61
+  s_7a61dd736ef877::t_8c6b0f235b2e2a 56-57
+README.md
+  s_7a61dd736ef877::t_735e909a3141fa 46-47
+  s_7a61dd736ef877::t_c9edc0754011b3 79
+  s_7a61dd736ef877::t_8c6b0f235b2e2a 81
+docs/Meetings.md
+  s_7a61dd736ef877::t_735e909a3141fa 1-21,40-65,68-73
+  s_7a61dd736ef877::t_c9edc0754011b3 22-39,66-67
+docs/Updating-and-Uninstalling.md
+  s_7a61dd736ef877::t_8c6b0f235b2e2a 7,17-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58ef2750857c5ab032c83930d56a46c65e4a22ea",
+  "prompts": {},
+  "sessions": {
+    "s_7a61dd736ef877": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "51650e3b-3a23-481a-a5d4-f73ecb2c9098",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
