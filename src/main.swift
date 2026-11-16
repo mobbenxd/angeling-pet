@@ -761,8 +761,8 @@ func dockBadge(_ bundle: String) -> String? {
 }
 
 // MARK: - Updates
-//   Checks the latest GitHub release at launch and every 6 hours (the only network call Angeling
-//   makes; it can be turned off). Updating runs the one-line installer in the background: it
+//   Checks the latest GitHub release at launch and every 6 hours (it can be turned off), and reads
+//   a release's notes once to show what is new, before and after updating. Updating runs the one-line installer in the background: it
 //   replaces the app, quits this copy and opens the new one.
 
 enum Updater {
@@ -816,6 +816,43 @@ enum Updater {
         }.resume()
     }
 
+    /// The lines of a release's notes worth showing in a row: the bullets under a "มีอะไรใหม่"
+    /// heading when the notes have one, otherwise their top-level bullets. Markdown is stripped
+    /// and long lines are cut.
+    static func highlights(_ body: String) -> [String] {
+        let lines = body.components(separatedBy: .newlines)
+        func bullets(_ ls: ArraySlice<String>) -> [String] {
+            ls.filter { $0.hasPrefix("- ") || $0.hasPrefix("* ") }.map { line in
+                var t = String(line.dropFirst(2))
+                t = t.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+                t = t.replacingOccurrences(of: #"\*\*|__|`"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+                return t.count > 90 ? String(t.prefix(89)) + "…" : t
+            }.filter { !$0.isEmpty }
+        }
+        if let h = lines.firstIndex(where: { $0.hasPrefix("#") && $0.contains("มีอะไรใหม่") }) {
+            let rest = lines[(h + 1)...]
+            let section = bullets(rest.prefix(while: { !$0.hasPrefix("#") }))
+            if !section.isEmpty { return section }
+        }
+        return bullets(lines[...])
+    }
+
+    /// Highlights of the release notes of `version` (empty on any failure), from the GitHub API.
+    static func fetchNotes(_ version: String, _ done: @escaping ([String]) -> Void) {
+        // Debug: ANGELING_RELEASE_NOTES is used as the notes of every version (no network).
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_RELEASE_NOTES"] { return done(highlights(fake)) }
+        guard ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil,
+              let url = URL(string: "https://api.github.com/repos/\(repo)/releases/tags/v\(version)") else { return done([]) }
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.setValue("Angeling/\(current)", forHTTPHeaderField: "User-Agent")
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let lines = highlights(json?["body"] as? String ?? "")
+            DispatchQueue.main.async { done(lines) }
+        }.resume()
+    }
+
     /// Runs the one-line installer detached, keeping the login item only if it is set up now.
     static func install() {
         let loginItem = FileManager.default.fileExists(atPath: home.appendingPathComponent("Library/LaunchAgents/local.angeling.pet.plist").path)
@@ -851,6 +888,8 @@ func reminderWhen(_ t: Double) -> String {
 
 final class ReminderStore {
     let ek = EKEventStore()
+    /// Notes of the Calendar events Angeling adds.
+    static let eventNote = "ตั้งเตือนจาก Angeling"
     private(set) var items: [Reminder] = []
     let url = URL(fileURLWithPath: ProcessInfo.processInfo.environment["ANGELING_REMINDERS"]
                   ?? baseDir.appendingPathComponent("reminders.json").path)
@@ -892,7 +931,7 @@ final class ReminderStore {
             ev.startDate = date
             ev.endDate = date.addingTimeInterval(1800)
             ev.calendar = cal
-            ev.notes = "ตั้งเตือนจาก Angeling"
+            ev.notes = ReminderStore.eventNote
             do { try ek.save(ev, span: .thisEvent); r.eventId = ev.eventIdentifier }
             catch { return "เพิ่มลงปฏิทินไม่สำเร็จ: \(error.localizedDescription)" }
         }
@@ -1054,6 +1093,74 @@ final class ReminderForm: NSObject {
         if let c = cal { UserDefaults.standard.set(c.calendarIdentifier, forKey: "reminderCalendar") }
         window.close()
         onSaved?()
+    }
+}
+
+// MARK: - Meetings (the next events in Calendar)
+//   Read-only, through the reminders' EventKit store, so it needs the same Calendar access and
+//   nothing else. A row shows shortly before an event starts; clicking it opens the meeting link
+//   found in the event (URL, location or notes), or Calendar when there is none.
+
+struct Meeting: Equatable {
+    var id: String               // event identifier + start, so each occurrence of a repeating event is its own
+    var title: String
+    var start: Double
+    var end: Double
+    var link: URL?
+    var service: String?         // "Zoom", "Google Meet", … for `link`
+}
+
+enum MeetingWatch {
+    /// A row stays this long after the start, for joining late.
+    static let lateFor: Double = 10 * 60
+    static let services: [(host: String, name: String)] = [
+        ("zoom.us", "Zoom"), ("zoomgov.com", "Zoom"), ("meet.google.com", "Google Meet"),
+        ("teams.microsoft.com", "Teams"), ("teams.live.com", "Teams"), ("webex.com", "Webex"),
+        ("whereby.com", "Whereby"), ("meet.goto.com", "GoTo"), ("gotomeeting.com", "GoTo"), ("chime.aws", "Chime"),
+        ("meet.jit.si", "Jitsi"), ("facetime.apple.com", "FaceTime"), ("discord.gg", "Discord"), ("discord.com", "Discord"),
+        ("slack.com", "Slack"), ("line.me", "LINE"), ("lin.ee", "LINE"),
+    ]
+
+    /// The first link to a known meeting service in the given texts.
+    static func link(in texts: [String?]) -> (URL, String)? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
+        for text in texts.compactMap({ $0 }) {
+            for m in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                guard let url = m.url, url.scheme == "https" || url.scheme == "http", let host = url.host?.lowercased() else { continue }
+                if let s = services.first(where: { host == $0.host || host.hasSuffix("." + $0.host) }) { return (url, s.name) }
+            }
+        }
+        return nil
+    }
+
+    /// Timed events from now to the end of tomorrow, soonest first. Leaves out all-day events,
+    /// cancelled ones, ones you declined, and the events Angeling's own reminders added.
+    static func load(_ store: ReminderStore) -> [Meeting] {
+        let now = Date()
+        // Debug: ANGELING_MEETINGS="title|minutes from now|link;…" fakes the calendar.
+        if let fake = ProcessInfo.processInfo.environment["ANGELING_MEETINGS"] {
+            return fake.split(separator: ";").enumerated().compactMap { i, item in
+                let f = item.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+                guard f.count >= 2, let mins = Double(f[1]) else { return nil }
+                let start = now.timeIntervalSince1970 + mins * 60
+                let found = link(in: [f.count > 2 ? f[2] : nil])
+                return Meeting(id: "fake\(i)", title: f[0], start: start, end: start + 1800, link: found?.0, service: found?.1)
+            }
+        }
+        guard store.calendarAccess, ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] == nil else { return [] }
+        let cal = Calendar.current
+        let until = cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: now))!
+        let own = Set(store.items.compactMap(\.eventId))
+        let pred = store.ek.predicateForEvents(withStart: now.addingTimeInterval(-lateFor), end: until, calendars: nil)
+        return store.ek.events(matching: pred).compactMap { ev -> Meeting? in
+            guard !ev.isAllDay, ev.status != .canceled, !own.contains(ev.eventIdentifier ?? ""),
+                  ev.notes != ReminderStore.eventNote,
+                  ev.attendees?.first(where: \.isCurrentUser)?.participantStatus != .declined else { return nil }
+            let found = link(in: [ev.url?.absoluteString, ev.location, ev.notes])
+            return Meeting(id: "\(ev.eventIdentifier ?? ev.title ?? "")|\(Int(ev.startDate.timeIntervalSince1970))",
+                           title: ev.title ?? "(ไม่มีชื่อ)", start: ev.startDate.timeIntervalSince1970,
+                           end: ev.endDate.timeIntervalSince1970, link: found?.0, service: found?.1)
+        }.sorted { $0.start < $1.start }
     }
 }
 
@@ -2418,6 +2525,9 @@ final class PetController: NSObject, NSMenuDelegate {
     var discordUnread = 0
     var discordDismissed: Int?  // unread count when the Discord row was hidden
     let reminders = ReminderStore()
+    var meetings: [Meeting] = []
+    var meetingDismissed = Set<String>()  // rows hidden by hand, or joined
+    var meetingAlerted = Set<String>()
     lazy var reminderForm: ReminderForm = {
         let f = ReminderForm(store: reminders)
         f.onSaved = { [weak self] in self?.setOverride("waving", for: 1.2); self?.showEmote("heh", for: 2.5); self?.refresh() }
@@ -2427,6 +2537,16 @@ final class PetController: NSObject, NSMenuDelegate {
     var latestVersion: String?
     var releasePage: URL?
     var updating = false
+    /// Snapshot runs share the real app's defaults, so they keep the two values below in memory only.
+    static let snapshotRun = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] != nil
+    /// Release-note highlights by version, kept across launches.
+    var releaseNotes: [String: [String]] = snapshotRun ? [:] : UserDefaults.standard.dictionary(forKey: "releaseNotes") as? [String: [String]] ?? [:] {
+        didSet { if !Self.snapshotRun { d.set(releaseNotes, forKey: "releaseNotes") } }
+    }
+    /// The version whose "what's new" row shows after an update, until it is clicked away.
+    var whatsNew: String? = snapshotRun ? nil : UserDefaults.standard.string(forKey: "whatsNew") {
+        didSet { if !Self.snapshotRun { d.set(whatsNew, forKey: "whatsNew") } }
+    }
     var autoUpdateCheck: Bool { flag("autoUpdateCheck") }
     var updateAvailable: Bool {
         guard let v = latestVersion else { return false }
@@ -2498,6 +2618,9 @@ final class PetController: NSObject, NSMenuDelegate {
     var showPlan: Bool { flag("showPlan") }
     var showLine: Bool { flag("showLine") }
     var showDiscord: Bool { flag("showDiscord") }
+    var showMeetings: Bool { flag("showMeetings") }
+    /// Minutes before an event's start that its row appears.
+    var meetingLead: Int { d.object(forKey: "meetingLead") as? Int ?? 15 }
 
     let d = UserDefaults.standard
     var activityHidden: Bool { get { d.bool(forKey: "activityHidden") } set { d.set(newValue, forKey: "activityHidden") } }
@@ -2618,9 +2741,14 @@ final class PetController: NSObject, NSMenuDelegate {
         pollLine()
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollLine(); self?.pollLimits() }
         reminders.syncWithCalendar()
+        reloadMeetings()
+        noteVersionChange()
+        NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: reminders.ek, queue: .main) { [weak self] _ in
+            self?.reloadMeetings()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.checkForUpdates(manual: false) }
         Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.checkForUpdates(manual: false) }
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.reminders.syncWithCalendar() }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.reminders.syncWithCalendar(); self?.reloadMeetings() }
     }
 
     /// Polls the LINE and Discord Dock badges (every 3 s, off the main thread).
@@ -2655,6 +2783,7 @@ final class PetController: NSObject, NSMenuDelegate {
             let wasAvailable = self.updateAvailable
             if let v { (self.latestVersion, self.releasePage) = (v, page) }
             if self.updateAvailable && !wasAvailable && !manual { self.showEmote("lv", for: 3) }
+            if self.updateAvailable, let v { self.loadNotes(v) }
             self.refresh()
             guard manual else { return }
             let alert = NSAlert()
@@ -2678,6 +2807,9 @@ final class PetController: NSObject, NSMenuDelegate {
     @objc func checkUpdatesNow() { checkForUpdates(manual: true) }
     @objc func runUpdate() {
         guard !updating else { return }
+        // A snapshot run must never replace the installed app (its settings window can take a stray Return);
+        // only the debug command may run there.
+        guard !Self.snapshotRun || ProcessInfo.processInfo.environment["ANGELING_UPDATE_CMD"] != nil else { return }
         updating = true
         setOverride("jumping", for: 1.2)
         refresh()
@@ -2695,6 +2827,66 @@ final class PetController: NSObject, NSMenuDelegate {
         }
     }
     @objc func openReleasePage() { if let u = releasePage { NSWorkspace.shared.open(u) } }
+
+    /// Reads a version's release notes once; they stay in the defaults (only the newest two versions).
+    func loadNotes(_ version: String) {
+        guard releaseNotes[version] == nil else { return }
+        Updater.fetchNotes(version) { [weak self] lines in
+            guard let self, !lines.isEmpty else { return }
+            var all = self.releaseNotes
+            all[version] = lines
+            let keep = all.keys.sorted { Updater.isNewer($0, than: $1) }.prefix(2)
+            self.releaseNotes = all.filter { keep.contains($0.key) }
+            self.refresh()
+        }
+    }
+
+    /// On the first launch of a newer version, turns on the "what's new" row. A copy from before
+    /// this was added has no "lastVersion" but has a saved position, which tells it from a new install.
+    func noteVersionChange() {
+        let env = ProcessInfo.processInfo.environment
+        // Debug: ANGELING_WHATS_NEW=1 shows the row in a snapshot; snapshots leave "lastVersion" alone.
+        guard !Self.snapshotRun else {
+            if env["ANGELING_WHATS_NEW"] != nil { whatsNew = Updater.current; loadNotes(Updater.current) }
+            return
+        }
+        let last = d.string(forKey: "lastVersion")
+        let updated = last.map { Updater.isNewer(Updater.current, than: $0) } ?? (d.object(forKey: "x") != nil && Updater.current != "dev")
+        if updated { whatsNew = Updater.current }
+        if Updater.current != "dev" { d.set(Updater.current, forKey: "lastVersion") }
+        if let v = whatsNew {
+            if v == Updater.current { loadNotes(v) } else { whatsNew = nil }
+        }
+    }
+    @objc func dismissWhatsNew() { whatsNew = nil; refresh() }
+    @objc func openWhatsNewPage() { Focus.openURL("https://github.com/\(Updater.repo)/releases/tag/v\(whatsNew ?? Updater.current)") }
+
+    /// Up to four lines of a version's highlights, as "• …" lines under a row's header.
+    func appendNotes(_ version: String, to t: NSMutableAttributedString) {
+        guard let lines = releaseNotes[version], !lines.isEmpty else { return }
+        for l in lines.prefix(4) { t.append(rowLine("• " + l, size: 11)) }
+        if lines.count > 4 { t.append(rowLine("และอีก \(lines.count - 4) อย่าง", size: 11, color: theme.secondary)) }
+    }
+
+    /// After an update: what the new version brought. Stays until clicked.
+    func whatsNewRow(width w: CGFloat) -> RowView {
+        let v = whatsNew ?? Updater.current
+        let t = rowHeader(icon: "✨", title: "อัปเดตเป็น \(v) แล้ว", titleColor: theme.gold, dot: theme.gold,
+                          status: "มีอะไรใหม่", statusColor: theme.secondary, width: w)
+        appendNotes(v, to: t)
+        t.append(rowLine("คลิกเพื่อปิด · คลิกขวาเพื่อดูรายละเอียด", size: 11, color: theme.secondary))
+        let r = RowView(text: t, width: w, clickable: true)
+        r.accent = theme.gold
+        r.onClick = { [weak self] in self?.dismissWhatsNew() }
+        r.onRightClick = { [weak self] e in
+            let m = NSMenu()
+            for (title, sel) in [("ดูรายละเอียดทั้งหมดบน GitHub", #selector(PetController.openWhatsNewPage)), ("ปิด", #selector(PetController.dismissWhatsNew))] {
+                m.addItem(withTitle: title, action: sel, keyEquivalent: "").target = self
+            }
+            NSMenu.popUpContextMenu(m, with: e, for: r)
+        }
+        return r
+    }
     @objc func skipVersion() { d.set(latestVersion, forKey: "skippedVersion"); refresh() }
     @objc func toggleAutoUpdateCheck() {
         d.set(!autoUpdateCheck, forKey: "autoUpdateCheck")
@@ -2704,6 +2896,7 @@ final class PetController: NSObject, NSMenuDelegate {
     func updateRow(width w: CGFloat) -> RowView {
         let t = rowHeader(icon: "🎁", title: updating ? "กำลังอัปเดตเป็น \(latestVersion ?? "")…" : "มี Angeling เวอร์ชันใหม่ \(latestVersion ?? "")",
                           titleColor: theme.gold, dot: theme.gold, status: "ตอนนี้ \(Updater.current)", statusColor: theme.secondary, width: w)
+        if !updating, let v = latestVersion { appendNotes(v, to: t) }
         t.append(rowLine(updating ? "Angeling จะปิดแล้วเปิดใหม่เองในไม่กี่วินาที" : "คลิกเพื่ออัปเดต · คลิกขวาสำหรับตัวเลือก",
                          size: 11, color: theme.secondary))
         let r = RowView(text: t, width: w, clickable: !updating)
@@ -2889,6 +3082,110 @@ final class PetController: NSObject, NSMenuDelegate {
         add("ลบการเตือน (เก็บ event ในปฏิทินไว้)", #selector(reminderDelete(_:)), (r.id, false))
         if r.eventId != nil { add("ลบทั้งการเตือนและ event ในปฏิทิน", #selector(reminderDelete(_:)), (r.id, true)) }
         return m
+    }
+
+    // MARK: meetings
+
+    func reloadMeetings() { meetings = showMeetings ? MeetingWatch.load(reminders) : [] }
+
+    /// Meetings to show now: from `meetingLead` minutes before the start (one minute with `soonOnly`)
+    /// until 10 minutes in, or the end if that comes first.
+    func dueMeetings(_ now: Double, soonOnly: Bool = false) -> [Meeting] {
+        meetings.filter { m in
+            !meetingDismissed.contains(m.id) && now < min(m.end, m.start + MeetingWatch.lateFor)
+                && m.start - now <= (soonOnly ? 60 : Double(meetingLead * 60))
+        }
+    }
+
+    /// A minute before a meeting starts, Angeling pops out and chimes once.
+    func checkMeetings(_ now: Double) {
+        for m in dueMeetings(now, soonOnly: true) where !meetingAlerted.contains(m.id) {
+            meetingAlerted.insert(m.id)
+            guard now < m.start + 60 else { continue }  // already under way when Angeling opened
+            if petHidden { petHidden = false; panel.orderFrontRegardless() }
+            setOverride("jumping", for: 1.2)
+            showEmote("omg", for: 4)
+            chime(1)
+        }
+    }
+
+    /// Opens the meeting link and puts the row away; without a link, opens Calendar.
+    func joinMeeting(_ m: Meeting) {
+        if let u = m.link { NSWorkspace.shared.open(u); meetingDismissed.insert(m.id) } else { openCalendarApp() }
+        setOverride("waving", for: 0.8)
+        refresh()
+    }
+    @objc func meetingJoin(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, let m = meetings.first(where: { $0.id == id }) else { return }
+        joinMeeting(m)
+    }
+    @objc func meetingHide(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        meetingDismissed.insert(id)
+        refresh()
+    }
+    @objc func openCalendarApp() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+    }
+    @objc func toggleMeetings() {
+        d.set(!showMeetings, forKey: "showMeetings")
+        if showMeetings && reminders.accessUndetermined { reminders.requestAccess { [weak self] _ in self?.reloadMeetings(); self?.refresh() } }
+        reloadMeetings()
+        refresh()
+    }
+    func setMeetingLead(_ mins: Int) { d.set(mins, forKey: "meetingLead"); refresh() }
+
+    /// "อีก 5 นาที" before the start, "เริ่มแล้ว 3 นาที" after it.
+    func meetingCountdown(_ m: Meeting, _ now: Double) -> String {
+        let mins = Int(ceil((m.start - now) / 60))
+        if mins > 0 { return "อีก \(mins) นาที" }
+        let late = Int((now - m.start) / 60)
+        return late < 1 ? "เริ่มแล้ว" : "เริ่มแล้ว \(late) นาที"
+    }
+
+    func meetingMenu(_ m: Meeting) -> NSMenu {
+        let menu = NSMenu()
+        func add(_ title: String, _ sel: Selector, _ obj: Any? = nil) {
+            let i = menu.addItem(withTitle: title, action: sel, keyEquivalent: "")
+            i.target = self
+            i.representedObject = obj
+        }
+        if let s = m.service { add("เข้าประชุม (\(s))", #selector(meetingJoin(_:)), m.id) }
+        add("เปิด Calendar", #selector(openCalendarApp))
+        add("ซ่อนนัดนี้", #selector(meetingHide(_:)), m.id)
+        menu.addItem(.separator())
+        add("ปิดการแสดงนัดจากปฏิทิน", #selector(toggleMeetings))
+        return menu
+    }
+
+    /// Meetings about to start or just started; orange from one minute before the start.
+    func meetingRows(width w: CGFloat, soonOnly: Bool = false) -> [RowView] {
+        let now = Date().timeIntervalSince1970
+        return dueMeetings(now, soonOnly: soonOnly).map { m in
+            let soon = m.start - now <= 60
+            let color = soon ? theme.alarm : theme.running
+            let span = clockTime.string(from: Date(timeIntervalSince1970: m.start)) + "–" + clockTime.string(from: Date(timeIntervalSince1970: m.end))
+            let t = rowHeader(icon: "📅", title: meetingCountdown(m, now), titleColor: color, dot: color,
+                              status: span, statusColor: theme.secondary, width: w)
+            t.append(rowLine(m.title, size: 13, bold: soon))
+            t.append(rowLine(m.service.map { "คลิกเพื่อเข้าประชุม (\($0))" } ?? "คลิกเพื่อเปิด Calendar", size: 11, color: theme.secondary))
+            let row = RowView(text: t, width: w, clickable: true)
+            if soon { row.accent = theme.alarm }
+            row.toolTip = "คลิกขวาเพื่อซ่อนนัดนี้"
+            row.onClick = { [weak self] in self?.joinMeeting(m) }
+            row.onRightClick = { [weak self] e in
+                guard let self else { return }
+                NSMenu.popUpContextMenu(self.meetingMenu(m), with: e, for: row)
+            }
+            return row
+        }
+    }
+
+    func meetingSignature(soonOnly: Bool = false) -> String {
+        let now = Date().timeIntervalSince1970
+        return dueMeetings(now, soonOnly: soonOnly).map { "M\($0.id)\($0.title)\(meetingCountdown($0, now))\($0.start - now <= 60)\($0.service ?? "")\(Int($0.end))" }.joined()
     }
 
     // MARK: themed row text
@@ -3120,6 +3417,22 @@ final class PetController: NSObject, NSMenuDelegate {
             i.submenu = reminderMenu(r, ringing: r.alertAt <= now)
         }
         m.addItem(withTitle: "การเตือนที่ตั้งไว้ (\(reminders.items.count))", action: nil, keyEquivalent: "").submenu = list
+        if showMeetings {
+            // Today's and tomorrow's events that haven't ended; click one to join it.
+            let next = meetings.filter { $0.end > now }.prefix(10)
+            let agenda = NSMenu()
+            if next.isEmpty {
+                let none = reminders.calendarAccess || !meetings.isEmpty ? "ไม่มีนัดถึงสิ้นวันพรุ่งนี้" : "ยังไม่ได้รับสิทธิ์เข้าถึงปฏิทิน"
+                agenda.addItem(withTitle: none, action: nil, keyEquivalent: "").isEnabled = false
+            }
+            for mt in next {
+                let i = agenda.addItem(withTitle: "\(reminderWhen(mt.start)) — \(mt.title)" + (mt.service.map { " (\($0))" } ?? ""),
+                                       action: #selector(meetingJoin(_:)), keyEquivalent: "")
+                i.target = self
+                i.representedObject = mt.id
+            }
+            m.addItem(withTitle: "📅 นัดถัดไป (\(next.count))", action: nil, keyEquivalent: "").submenu = agenda
+        }
         m.addItem(.separator())
         if !forStatusBar { item("ซ่อน Angeling (⌥⌘A)", #selector(togglePet)) }
         item("ล้าง session ที่เสร็จแล้ว", #selector(clearDone))
@@ -3232,6 +3545,7 @@ final class PetController: NSObject, NSMenuDelegate {
         let live = visibleSessions()
         let primary = live.first
         checkReminders(now)
+        checkMeetings(now)
 
         // A tucked-away Angeling pops back out when a session starts waiting on you.
         let newlyWaiting = live.contains { $0.1 == "waiting" && !previouslyWaiting.contains($0.0.session ?? "") }
@@ -3339,10 +3653,11 @@ final class PetController: NSObject, NSMenuDelegate {
         // A hidden bubble still shows ringing reminders and, unless turned off, sessions that need you.
         let waiting = live.filter { $0.1 == "waiting" }
         let urgent = popWhenWaiting ? waiting : []
-        let sig = activityHidden ? "hidden|" + reminderSignature() + "|" + rowsSignature(urgent) : rowsSignature(live)
+        let sig = activityHidden ? "hidden|" + reminderSignature() + "|" + meetingSignature(soonOnly: true) + "|" + rowsSignature(urgent) : rowsSignature(live)
         if sig != lastRowsSig {
             lastRowsSig = sig
-            let rows = activityHidden ? reminderRows(width: winWidth - bubble.pad * 2, ringingOnly: true) + makeRows(urgent, urgentOnly: true)
+            let rows = activityHidden ? reminderRows(width: winWidth - bubble.pad * 2, ringingOnly: true)
+                                        + meetingRows(width: winWidth - bubble.pad * 2, soonOnly: true) + makeRows(urgent, urgentOnly: true)
                                       : makeRows(live)
             bubbleSize = rows.isEmpty ? .zero : bubble.set(rows: rows, width: winWidth)
         }
@@ -3474,12 +3789,13 @@ final class PetController: NSObject, NSMenuDelegate {
     func rowsSignature(_ live: [(SessionState, String)]) -> String {
         let now = Date().timeIntervalSince1970
         let idleQuiet = live.first.map { $0.1 == "idle" && now - ($0.0.updated ?? 0) > 60 } ?? true
-        let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)" : "")
+        let lineSig = (updateAvailable ? "U\(latestVersion ?? "")\(updating)\(releaseNotes[latestVersion ?? ""]?.count ?? 0)" : "")
+            + (whatsNew.map { "W\($0)\(releaseNotes[$0]?.count ?? 0)" } ?? "")
             + (lineVisible ? "L\(lineUnread)" : "-")
             + (discordVisible ? "|D\(discordUnread)" : "")
         let limitSig = limitProviders.map { "\($0.rawValue)\(limitState($0).signature)\(limitStale[$0].map { "~\(Int($0.timeIntervalSince1970))" } ?? "")" }.joined()
         let permitSig = permits.map { p in p.id + "s\(questionStep[p.id] ?? 0)\(questionNudge.contains(p.id))" + (questionPicks[p.id].map { "\($0.sorted { $0.key < $1.key }.map { $0.value })" } ?? "") }.joined(separator: ",")
-        return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|" + live.map { s, st in
+        return "\(expanded)|\(permitSig)|\(limitSig)\(limitsLeft)\(limitPlace)\(limitWindows)|\(showTask)\(showText)\(showPlan)|\(idleQuiet)|\(lineSig)|\(reminderSignature())|\(meetingSignature())|" + live.map { s, st in
             "\(s.session ?? "")\(st)\(s.updated ?? 0)"
         }.joined(separator: ",")
     }
@@ -3720,7 +4036,7 @@ final class PetController: NSObject, NSMenuDelegate {
         if expanded {
             // Sessions that need you go above everything else, every one of them.
             var rows = permitRows + waiting.map { sessionRow($0.0, $0.1, detailed: true) }
-                + reminderRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
+                + reminderRows(width: w) + meetingRows(width: w) + (updateAvailable ? [updateRow(width: w)] : []) + (whatsNew != nil ? [whatsNewRow(width: w)] : []) + (lineVisible ? [lineRow()] : []) + (discordVisible ? [discordRow()] : [])
                 + live.filter { $0.1 != "waiting" }.map { sessionRow($0.0, $0.1, detailed: true) }
             if rows.isEmpty { rows = [RowView(text: NSAttributedString(string: "ยังไม่มีงานที่กำลังทำ~", attributes: normal), width: w, clickable: false)] }
             return withHeader(rows)
@@ -3732,7 +4048,9 @@ final class PetController: NSObject, NSMenuDelegate {
         ranked += waiting.map { (sessionRow($0.0, $0.1, detailed: false), true) }
         ranked += live.filter { $0.1 == "failed" }.map { (sessionRow($0.0, $0.1, detailed: false), false) }
         ranked += reminderRows(width: w).map { ($0, false) }
+        ranked += meetingRows(width: w).map { ($0, false) }
         if updateAvailable { ranked.append((updateRow(width: w), false)) }
+        if whatsNew != nil { ranked.append((whatsNewRow(width: w), false)) }
         ranked += live.filter { ["running", "review"].contains($0.1) }.map { (sessionRow($0.0, $0.1, detailed: false), false) }
         // Finished tasks stay listed in green until opened, dismissed, or 30 min old.
         ranked += live.filter { $0.1 == "done" }.map { (sessionRow($0.0, $0.1, detailed: false), false) }
@@ -4023,12 +4341,14 @@ enum SettingsTab: String, CaseIterable {
         }
     }
     var height: CGFloat {
+        // Debug: ANGELING_SETTINGS_HEIGHT=900 makes the window that tall, to capture what is below the fold.
+        if let h = ProcessInfo.processInfo.environment["ANGELING_SETTINGS_HEIGHT"].flatMap(Double.init) { return CGFloat(h) }
         switch self {
         case .general: return 450
         case .look: return 560
-        case .alerts: return 280
+        case .alerts: return 500
         case .limits: return 720
-        case .updates: return 250
+        case .updates: return 330
         }
     }
 }
@@ -4037,6 +4357,8 @@ final class SettingsModel: ObservableObject {
     unowned let c: PetController
     init(_ c: PetController) { self.c = c }
 
+    /// Whether the "meetings from MS Teams" guide is open (debug: ANGELING_TEAMS_GUIDE opens it).
+    var teamsGuide = ProcessInfo.processInfo.environment["ANGELING_TEAMS_GUIDE"] != nil
     /// A binding that reads the live value and writes through `set`, then redraws.
     func bind<T>(_ get: @escaping () -> T, _ set: @escaping (T) -> Void) -> Binding<T> {
         Binding(get: get, set: { [weak self] v in set(v); self?.objectWillChange.send() })
@@ -4145,6 +4467,47 @@ struct SettingsPane: View {
             } footer: {
                 Text("แสดงแค่จำนวนที่ยังไม่อ่าน จาก badge บน Dock").font(.caption).foregroundStyle(.secondary)
             }
+            Section {
+                Toggle("แสดงนัดถัดไปจากปฏิทิน", isOn: m.bind({ c.showMeetings }, { if $0 != c.showMeetings { c.toggleMeetings() } }))
+                if c.showMeetings {
+                    Picker("แสดงล่วงหน้า", selection: m.bind({ c.meetingLead }, { c.setMeetingLead($0) })) {
+                        ForEach([5, 10, 15, 30, 60], id: \.self) { Text($0 < 60 ? "\($0) นาที" : "1 ชั่วโมง").tag($0) }
+                    }
+                    // Teams and Outlook meetings live in the work account, which Calendar only shows once it is added to macOS.
+                    DisclosureGroup("นัด MS Teams / Outlook ไม่ขึ้น?", isExpanded: m.bind({ m.teamsGuide }, { m.teamsGuide = $0 })) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Angeling อ่านนัดจากแอป Calendar ของ Mac จึงต้องเพิ่มบัญชีงาน Microsoft 365 ให้ Calendar ก่อน")
+                                .foregroundStyle(.secondary)
+                            ForEach(Array([
+                                "กดปุ่ม \"เปิด Internet Accounts…\" ด้านล่าง",
+                                "กด Add Account… แล้วเลือก Microsoft Exchange",
+                                "ล็อกอินด้วยอีเมลงาน (อันเดียวกับที่ใช้ใน Teams)",
+                                "เปิดสวิตช์ Calendars ของบัญชีนั้น",
+                                "เปิดแอป Calendar รอให้นัด Teams ขึ้น แล้ว Angeling จะเห็นภายใน 1 นาที",
+                            ].enumerated()), id: \.offset) { i, step in
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("\(i + 1).").monospacedDigit().foregroundStyle(.secondary)
+                                    Text(step)
+                                }
+                            }
+                            HStack {
+                                Button("เปิด Internet Accounts…") { Focus.openURL("x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension") }
+                                Button("เปิด Calendar") { c.openCalendarApp() }
+                            }
+                            Text("ถ้าองค์กรไม่ให้เพิ่มบัญชี: ใน Outlook บนเว็บ ไปที่ Settings → Calendar → Shared calendars → Publish a calendar (เลือก Can view all details) คัดลอกลิงก์ ICS แล้วใส่ในแอป Calendar → File → New Calendar Subscription…")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .font(.callout)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                    }
+                }
+            } header: {
+                Text("นัดจากปฏิทิน")
+            } footer: {
+                Text("คลิกแถวนัดเพื่อเข้าประชุม (Zoom, Google Meet, Teams ฯลฯ) ก่อนเริ่ม 1 นาที Angeling จะโผล่มาเตือน ใช้สิทธิ์ปฏิทินเดียวกับการเตือน")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("การเตือน") {
                 Picker("เสียงเตือน", selection: m.bind({ c.reminderSound }, { c.setReminderSound($0) })) {
                     ForEach(c.reminderSoundChoices, id: \.0) { Text($0.1).tag($0.0) }
@@ -4212,6 +4575,12 @@ struct SettingsPane: View {
                 LabeledContent("เวอร์ชันที่ใช้อยู่", value: Updater.current)
                 if c.updateAvailable {
                     LabeledContent("มีเวอร์ชันใหม่", value: c.latestVersion ?? "")
+                    if let notes = c.releaseNotes[c.latestVersion ?? ""], !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("มีอะไรใหม่").font(.callout.weight(.semibold))
+                            ForEach(Array(notes.enumerated()), id: \.offset) { _, n in Text("• " + n).font(.callout).foregroundStyle(.secondary) }
+                        }
+                    }
                     HStack {
                         Spacer()
                         Button("ดูว่ามีอะไรใหม่") { c.openReleasePage() }
