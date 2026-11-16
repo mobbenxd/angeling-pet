@@ -1,12 +1,12 @@
 # Angeling Pet
 
-A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session status, rings reminders that it also adds to Calendar, and shows unread counts for LINE and Discord. Distributed through GitHub Releases with a one-line installer.
+A floating macOS desktop pet (Swift/AppKit) that shows Claude Code session status, rings reminders that it also adds to Calendar, shows the next Calendar meeting with a click to join, and shows unread counts for LINE and Discord. Distributed through GitHub Releases with a one-line installer.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, permission prompts, Focus (jump to window), LINE, Discord, Updates, Reminders, usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys (⌥⌘A/⌥⌘R always; ⌥⌘Y/⌥⌘N/⌥⌘1–4 only while a permission request waits), app entry plus debug modes |
+| `src/main.swift` | The whole app, one file. Sections (`// MARK:`): sprite sheet, Bomber characters, session state, permission prompts, Focus (jump to window), LINE, Discord, Updates, Reminders, Meetings (next Calendar events, read-only), usage limits (Claude statusLine wrapper, Codex, AGY), rows/bubble, pet view, controller, settings window (SwiftUI), hotkeys (⌥⌘A/⌥⌘R always; ⌥⌘Y/⌥⌘N/⌥⌘1–4 only while a permission request waits), app entry plus debug modes |
 | `hooks/angeling-hook.sh` | Claude Code hook (11 events). Writes `~/.claude/angeling-pet/state/<session>.json`, with a per-session mkdir lock and mktemp+mv writes |
 | `hooks/angeling-permit.sh` | `PermissionRequest` hook (installed as `permit.sh`, timeout 600). Writes `permits/<id>.json`, waits for the app's `permits/<id>.answer` (allow/always/deny, or a JSON answers object for AskUserQuestion, sent back as `updatedInput.answers`); exits at once unless `permits/enabled` exists and Angeling runs (and for AskUserQuestion when `permits/no-questions` exists). Claude Code's own prompt shows meanwhile; answering it there usually SIGTERMs the hook, and otherwise the hook sees the tool's result in the transcript and exits |
 | `install.sh` / `uninstall.sh` | Installer: prebuilt app from a bundle, or builds from source. The Claude hook is optional |
@@ -35,10 +35,10 @@ ANGELING_SNAPSHOT=/path/out.png build/Angeling.app/Contents/MacOS/Angeling
 ```
 
 Fakes for snapshots are listed in `docs/Development.md`:
-- `ANGELING_EXPANDED`, `ANGELING_LIMITS`, `ANGELING_LIMIT_AGE`, `ANGELING_CODEX_LIMITS`, `ANGELING_AGY_LIMITS`, `ANGELING_LIMIT_MODE`, `ANGELING_LIMIT_PLACE`, `ANGELING_LIMIT_STYLE`, `ANGELING_LIMIT_WINDOWS`, `ANGELING_LIMIT_SIZE`, `ANGELING_LIMIT_OUTLINE`, `ANGELING_LIMIT_MODELS`, `ANGELING_HIDE_ACTIVITY`, `ANGELING_HOVER`, `ANGELING_EMOTE`, `ANGELING_FORM`, `ANGELING_SETTINGS`, `ANGELING_MENU`
-- `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_STATE_DIR`, `ANGELING_PERMIT_DIR`, `ANGELING_PERMIT_STEP`, `ANGELING_THEME`
+- `ANGELING_EXPANDED`, `ANGELING_LIMITS`, `ANGELING_LIMIT_AGE`, `ANGELING_CODEX_LIMITS`, `ANGELING_AGY_LIMITS`, `ANGELING_LIMIT_MODE`, `ANGELING_LIMIT_PLACE`, `ANGELING_LIMIT_STYLE`, `ANGELING_LIMIT_WINDOWS`, `ANGELING_LIMIT_SIZE`, `ANGELING_LIMIT_OUTLINE`, `ANGELING_LIMIT_MODELS`, `ANGELING_HIDE_ACTIVITY`, `ANGELING_HOVER`, `ANGELING_EMOTE`, `ANGELING_FORM`, `ANGELING_SETTINGS`, `ANGELING_SETTINGS_HEIGHT`, `ANGELING_TEAMS_GUIDE`, `ANGELING_MENU`
+- `ANGELING_LINE_UNREAD`, `ANGELING_DISCORD_UNREAD`, `ANGELING_REMINDERS`, `ANGELING_MEETINGS`, `ANGELING_STATE_DIR`, `ANGELING_PERMIT_DIR`, `ANGELING_PERMIT_STEP`, `ANGELING_THEME`
 - `ANGELING_CHARACTER`, `ANGELING_ANIM`
-- `ANGELING_FAKE_VERSION`, `ANGELING_LATEST_VERSION`, `ANGELING_UPDATE_NOW`, `ANGELING_UPDATE_CMD`
+- `ANGELING_FAKE_VERSION`, `ANGELING_LATEST_VERSION`, `ANGELING_RELEASE_NOTES`, `ANGELING_WHATS_NEW`, `ANGELING_UPDATE_NOW`, `ANGELING_UPDATE_CMD`
 
 Installer tests go in a throwaway HOME:
 - `env -i HOME=<tmp> PATH=/usr/bin:/bin:/usr/sbin:/sbin ANGELING_NO_LAUNCH=1 bash get.sh --no-login`
@@ -55,6 +55,8 @@ Installer tests go in a throwaway HOME:
   3. verify with the real one-liner in a throwaway HOME
 
   Running apps notice a new release within 6 h.
+
+  The app shows the release notes to users (the 🎁 row before updating, the ✨ row after), so every release's notes start with a `## มีอะไรใหม่` heading and up to four short Thai bullets (one line each, user-facing, no code names). Details in English can follow under another heading; without that heading the app falls back to the first top-level bullets.
 - **Artwork** (Angeling sprite sheet, Ragnarok emotes, level-up sound) is © Gravity. It is never committed (see `.gitignore`); it ships only as release assets. The Bomber characters (`assets/characters/`, built by `scripts/import-characters.py`) follow the same rule and ship as `characters.zip`; extra Codex pets (`assets/pets/`, e.g. Bee Husky, Banana Dog, Dino, Business Unicorn, Smug Husky, Banana Twins) ship as `pets.zip`.
 - **Privacy**: LINE and Discord show **counts only**, read from each app's Dock badge via `lsappinfo`. Do not read message contents or the Notification Center database, and do not ask for Full Disk Access. The user decided this explicitly.
 - **UI text** is Thai and **code comments** are English, matching the existing style. Keep `main.swift` as one file and follow its section layout.

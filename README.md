@@ -43,7 +43,8 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 | [Requirements](docs/Requirements.md) | [Usage: clicks, menus, hotkey](docs/Usage.md) | [Troubleshooting](docs/Troubleshooting.md) |
 | [Installation](docs/Installation.md) | [Activity bubble and statuses](docs/Activity-Bubble.md) | [Updating and uninstalling](docs/Updating-and-Uninstalling.md) |
 | [First run](docs/First-Run.md) | [Reminders](docs/Reminders.md) | [How it works](docs/How-It-Works.md) |
-| | [LINE notifications](docs/LINE-Notifications.md) | [Development](docs/Development.md) |
+| | [Next meeting from Calendar](docs/Meetings.md) | [Development](docs/Development.md) |
+| | [LINE notifications](docs/LINE-Notifications.md) | |
 | | [Discord notifications](docs/Discord-Notifications.md) | |
 | | [Claude, Codex and AGY usage limits](docs/Usage-Limits.md) | |
 | | [Emotes and animations](docs/Emotes-and-Animations.md) | |
@@ -75,8 +76,9 @@ The full guide (in Thai) is in **[docs/](docs/README.md)**.
 - **Needs you now**: when Claude asks for permission or asks you something, the row turns red with a slow pulse and moves to the top. Angeling gets a red "!" badge and plays a short sound (can be muted).
 - **Choose what the bubble shows**: right-click a row, or open ตั้งค่า… → ทั่วไป, to turn the prompt, the latest message and the task list on or off.
 - **Reminders**: press ⌥⌘R, type what to do and pick a date and time. Angeling adds a 30-minute event to your Calendar, then at that time pops out (even when hidden), plays the Ragnarok level-up sound and keeps an orange alert row until you click it or snooze it. Moving or deleting the event in Calendar moves or cancels the reminder. Adding it to Calendar needs Calendar access. See [Reminders](docs/Reminders.md).
+- **Next meeting**: 15 minutes before a Calendar event starts (5 to 60, your choice), a 📅 row shows its name, its time and a countdown. Click it to open the event's Zoom, Google Meet, Teams or other meeting link (found in the event's URL, location or notes), or Calendar when it has none. A minute before the start the row turns orange and Angeling pops out and chimes once; the row stays for 10 minutes after the start for joining late. The menu lists the events up to the end of tomorrow. All-day, cancelled and declined events are left out. It only reads Calendar, with the access reminders already use; turn it off in ตั้งค่า… → แจ้งเตือน, where a short guide also shows how to add a Microsoft 365 account to macOS so that Teams and Outlook meetings appear. See [Next meeting from Calendar](docs/Meetings.md).
 - **Discord**: a purple Discord row shows how many DMs and @mentions are unread. The number is Discord's own Dock badge count, so no permission is needed and no message is read. Click it to open Discord. See [Discord notifications](docs/Discord-Notifications.md).
-- **Update notices**: when a new release is out, a 🎁 row shows the new version. Click it to update in place. Right-click it to see what's new or skip that version.
+- **Update notices**: when a new release is out, a 🎁 row shows the new version and up to four lines of what is new in it (from the release notes). Click it to update in place. Right-click it to open the release page or skip that version. After an update, a ✨ row lists what the new version brought until you click it.
 - **LINE**: a green LINE row shows how many LINE messages are unread. The number is LINE's own Dock badge count, so no permission is needed and no message is read. Click it to open LINE. Right-click it to hide it until the count rises. See [LINE notifications](docs/LINE-Notifications.md).
 - **Animations**: idle, running, reading, waiting, failed and waving, from the Codex pet sprite format. Drag Angeling and it runs along.
 - **Ragnarok emotes** (`/heh` `/lv` `/wah` `/omg` `/swt` `/slur`):
