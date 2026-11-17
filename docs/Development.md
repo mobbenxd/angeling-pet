@@ -63,7 +63,8 @@ ANGELING_SNAPSHOT=/tmp/a.png ~/Applications/Angeling.app/Contents/MacOS/Angeling
 | `ANGELING_SETTINGS_HEIGHT=900` | ทำให้หน้าต่างตั้งค่าสูงเท่านี้ เพื่อจับภาพส่วนที่ต้องเลื่อนลงไปดู |
 | `ANGELING_BREAK=55` | แสดงแถวเตือนให้พัก เหมือนทำงานมา 55 นาที |
 | `ANGELING_WATER=1` | แสดงแถวเตือนให้ดื่มน้ำ |
-| `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling |
+| `ANGELING_FORM=1` | จับภาพหน้าต่างตั้งเตือนแทนตัว Angeling (ใส่ข้อความแทน `1` เพื่อใช้เป็นสิ่งที่พิมพ์ในช่อง เช่น `ANGELING_FORM="พรุ่งนี้ 10 โมง ส่งรายงาน"`) |
+| `ANGELING_PARSE="พรุ่งนี้ 10 โมง ส่งรายงาน;บ่ายสาม ประชุม"` | พิมพ์ว่าแต่ละประโยค (คั่นด้วย `;`) ถูกอ่านเป็นวันเวลาและชื่อการเตือนอย่างไร แล้วปิด |
 | `ANGELING_MENU=1` | จับภาพรายการในเมนูของไอคอนแถบเมนู (วาดเป็นรายการธรรมดา เพราะวาด NSMenu จริงนอกจอไม่ได้) |
 | `ANGELING_SETTINGS=look` | จับภาพหน้าต่างตั้งค่าหมวดนี้แทนตัว Angeling (`general`, `look`, `alerts`, `limits`, `updates`) |
 | `ANGELING_CHARACTER=thunder` | ใช้ตัวละครนี้ (`angeling`, `id` ของเพ็ตใน `pets/` หรือ `id` ใน `characters.json`) |

@@ -970,15 +970,156 @@ final class ReminderStore {
     }
 }
 
+/// Reads the date and time out of a reminder typed as one phrase, Thai or simple English:
+/// "พรุ่งนี้ 10 โมง ส่งรายงาน", "ศุกร์หน้า บ่ายสาม ประชุม", "อีก 15 นาที โทรหาแม่", "25/12 9:30 จ่ายบิล".
+/// Returns the time and what is left of the phrase as the title; nil when it names no time.
+enum ReminderParser {
+    static let words: [String: Int] = ["หนึ่ง": 1, "นึง": 1, "สอง": 2, "สาม": 3, "สี่": 4, "ห้า": 5, "หก": 6, "เจ็ด": 7, "แปด": 8,
+                                      "เก้า": 9, "สิบ": 10, "สิบเอ็ด": 11, "สิบสอง": 12]
+    static let num = #"(\d{1,2}|สิบเอ็ด|สิบสอง|สิบ|หนึ่ง|นึง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า)"#
+    static let months = ["ม.ค.|มกราคม|มกรา", "ก.พ.|กุมภาพันธ์|กุมภา", "มี.ค.|มีนาคม|มีนา", "เม.ย.|เมษายน|เมษา", "พ.ค.|พฤษภาคม|พฤษภา",
+                         "มิ.ย.|มิถุนายน|มิถุนา", "ก.ค.|กรกฎาคม|กรกฎา", "ส.ค.|สิงหาคม|สิงหา", "ก.ย.|กันยายน|กันยา", "ต.ค.|ตุลาคม|ตุลา",
+                         "พ.ย.|พฤศจิกายน|พฤศจิกา", "ธ.ค.|ธันวาคม|ธันวา"]
+    static let weekdays = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัส", "ศุกร์", "เสาร์"]  // Calendar weekday 1…7
+    static let partOfDay = ["เช้า": 9, "สาย": 10, "เที่ยง": 12, "บ่าย": 13, "เย็น": 17, "ค่ำ": 19, "คืน": 20, "ดึก": 22]
+
+    static func parse(_ text: String, now: Date = Date()) -> (date: Date, title: String)? {
+        var s = text
+        // Gregorian on purpose: years are worked out in C.E. here, and the Mac's own calendar may be Buddhist.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
+        /// The first match of `pattern`, cut out of `s`; its capture groups (nil where a group took no part).
+        func take(_ pattern: String) -> [String?]? {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let m = re.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)), let whole = Range(m.range, in: s) else { return nil }
+            let groups = (0..<m.numberOfRanges).map { i in Range(m.range(at: i), in: s).map { String(s[$0]) } }
+            s.replaceSubrange(whole, with: " ")
+            return groups
+        }
+        func n(_ t: String?) -> Int? { t.flatMap { Int($0) ?? words[$0] } }
+        func title() -> String {
+            s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        }
+
+        // "อีก 10 นาที", "อีกครึ่งชั่วโมง", "อีก 2 ชม. ครึ่ง", "in 20 min": counted from now.
+        var dayOffset: Int?
+        if let g = take(#"อีก\s*(ครึ่ง)?\s*"# + num + #"?\s*(นาที|ชั่วโมง|ชม\.?|วัน|สัปดาห์|อาทิตย์)\s*(ครึ่ง)?"#) {
+            let half = g[1] != nil, unit = g[3] ?? "", plusHalf = g[4] != nil
+            var count = Double(n(g[2]) ?? (half ? 0 : 1))
+            if half { count += 0.5 }
+            if plusHalf { count += 0.5 }
+            switch unit {
+            case "นาที": return (now.addingTimeInterval(count * 60), title())
+            case "วัน": dayOffset = Int(count)
+            case "สัปดาห์", "อาทิตย์": dayOffset = Int(count) * 7
+            default: return (now.addingTimeInterval(count * 3600), title())
+            }
+        } else if let g = take(#"\bin\s+(\d{1,3})\s*(minutes?|mins?|hours?|hrs?)\b"#), let c = Double(g[1] ?? "") {
+            return (now.addingTimeInterval(c * ((g[2] ?? "").lowercased().hasPrefix("m") ? 60 : 3600)), title())
+        }
+
+        // The time of day.
+        var hour: Int?, minute = 0, fallbackHour: Int?
+        if let g = take(#"(?:ตอน|เวลา)?\s*(\d{1,2})[:.](\d{2})\s*(am|pm)?(?:\s*น\.)?"#), let h = Int(g[1] ?? ""), let m = Int(g[2] ?? ""), h < 24, m < 60 {
+            let pm = (g[3] ?? "").lowercased()
+            hour = pm == "pm" && h < 12 ? h + 12 : pm == "am" && h == 12 ? 0 : h
+            minute = m
+        } else if take("เที่ยงคืน") != nil {
+            hour = 24
+        } else if let g = take(#"(?:ตอน)?(เช้า|บ่าย|เย็น|ค่ำ)?\s*"# + num + #"\s*โมง(ครึ่ง)?\s*(เช้า|เย็น)?(ครึ่ง)?(?:\s*(\d{1,2})\s*นาที)?"#), let h = n(g[2]) {
+            let part = g[4] ?? g[1]
+            if part == "เช้า" { hour = h <= 5 ? h + 6 : h }                 // 1 โมงเช้า = 07:00
+            else if part != nil { hour = h <= 6 ? h + 12 : h }               // บ่าย 3 โมง, 5 โมงเย็น
+            else { hour = h <= 6 ? h + 12 : h }                              // plain "4 โมง" is the afternoon, "10 โมง" the morning
+            minute = g[3] != nil || g[5] != nil ? 30 : Int(g[6] ?? "") ?? 0
+        } else if let g = take(num + #"\s*ทุ่ม(ครึ่ง)?"#), let h = n(g[1]), h <= 6 {
+            (hour, minute) = (18 + h, g[2] != nil ? 30 : 0)
+        } else if let g = take(#"ทุ่ม(?:นึง|หนึ่ง)?(ครึ่ง)?"#) {
+            (hour, minute) = (19, g[1] != nil ? 30 : 0)
+        } else if let g = take(#"ตี\s*"# + num + "(ครึ่ง)?"), let h = n(g[1]), h <= 5 {
+            (hour, minute) = (h, g[2] != nil ? 30 : 0)
+        } else if let g = take(#"(\d{1,2})\s*(am|pm)\b"#), let h = Int(g[1] ?? ""), h <= 12 {
+            hour = (g[2] ?? "").lowercased() == "pm" ? (h == 12 ? 12 : h + 12) : (h == 12 ? 0 : h)
+        }
+
+        // The day.
+        var day: Date?, bareWeekday = false
+        let today = cal.startOfDay(for: now)
+        func plus(_ days: Int) -> Date { cal.date(byAdding: .day, value: days, to: today)! }
+        /// The day for these components; nil for one that doesn't exist (31/2).
+        func real(_ c: DateComponents) -> Date? { cal.date(from: c).flatMap { cal.component(.day, from: $0) == c.day ? $0 : nil } }
+        if let off = dayOffset { day = plus(off) }
+        if let g = take(#"(เช้า|เที่ยง|บ่าย|เย็น|คืน)นี้|\b(tonight)\b"#) {
+            day = today
+            fallbackHour = g[2] != nil ? 20 : partOfDay[g[1] ?? ""]
+        } else if let g = take(#"(มะรืนนี้|มะรืน|พรุ่งนี้|วันนี้|tomorrow|today)\s*(เช้า|สาย|เย็น|ค่ำ|ดึก)?"#) {
+            let w = (g[1] ?? "").lowercased()
+            day = plus(w.hasPrefix("มะรืน") ? 2 : w == "พรุ่งนี้" || w == "tomorrow" ? 1 : 0)
+            fallbackHour = partOfDay[g[2] ?? ""]
+        } else if let g = take(#"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?"#), let d = Int(g[1] ?? ""), let m = Int(g[2] ?? ""), (1...31).contains(d), (1...12).contains(m) {
+            var y = Int(g[3] ?? "")
+            if let v = y { y = v > 2400 ? v - 543 : v >= 100 ? v : v >= 50 ? 1957 + v : 2000 + v }  // 2569, 69 (B.E.) and 26 all mean 2026
+            var c = DateComponents(year: y ?? cal.component(.year, from: now), month: m, day: d)
+            if y == nil, let t = cal.date(from: c), t < today { c.year! += 1 }
+            day = real(c)
+        } else if let g = take(#"(?:วันที่\s*)?(\d{1,2})\s*("# + months.joined(separator: "|").replacingOccurrences(of: ".", with: #"\."#) + ")"),
+                  let d = Int(g[1] ?? ""), let m = months.firstIndex(where: { $0.split(separator: "|").contains(Substring(g[2] ?? "")) }) {
+            var c = DateComponents(year: cal.component(.year, from: now), month: m + 1, day: d)
+            if let t = cal.date(from: c), t < today { c.year! += 1 }
+            day = real(c)
+        } else if let g = take(#"วันที่\s*(\d{1,2})"#), let d = Int(g[1] ?? ""), (1...31).contains(d) {
+            var c = cal.dateComponents([.year, .month], from: now)
+            c.day = d
+            if let t = cal.date(from: c), t < today { c.month! += 1 }
+            day = real(c)
+        } else if take("(?:สัปดาห์|อาทิตย์)หน้า") != nil {
+            day = plus(7)
+        } else if let g = take("(วัน)?(" + weekdays.joined(separator: "|") + ")(?:บดี)?(นี้|หน้า)?"), let w = weekdays.firstIndex(of: g[2] ?? ""),
+                  w != 0 || g[1] != nil {                                   // "อาทิตย์" alone is not a day
+            let ahead = (w + 1 - cal.component(.weekday, from: now) + 7) % 7
+            if g[3] == "หน้า" {
+                // The one in next week (weeks start on Monday).
+                let toMonday = (9 - cal.component(.weekday, from: now)) % 7
+                day = plus((toMonday == 0 ? 7 : toMonday) + (w + 6) % 7)
+            } else {
+                day = plus(ahead)
+                bareWeekday = true
+            }
+        }
+
+        // "บ่าย 3", "บ่ายโมง", "เที่ยงครึ่ง", and a time of day named after "ตอน".
+        if hour == nil {
+            if let g = take(#"(?:ตอน)?บ่าย\s*"# + num + #"?\s*(?:โมง)?(ครึ่ง)?"#) {
+                let h = n(g[1]) ?? 1
+                if h <= 6 { (hour, minute) = (12 + h, g[2] != nil ? 30 : 0) }
+            } else if let g = take(#"(?:ตอน)?เที่ยง(ครึ่ง)?"#) {
+                (hour, minute) = (12, g[1] != nil ? 30 : 0)
+            } else if let g = take(#"ตอน\s*(เช้า|สาย|เย็น|ค่ำ|ดึก)"#) {
+                fallbackHour = partOfDay[g[1] ?? ""]
+            }
+        }
+
+        guard day != nil || hour != nil || fallbackHour != nil else { return nil }
+        let h = hour ?? fallbackHour ?? 9
+        guard var date = cal.date(bySettingHour: h % 24, minute: minute, second: 0, of: day ?? today) else { return nil }
+        if h == 24 { date = cal.date(byAdding: .day, value: 1, to: date)! }
+        // A time alone that has passed today means tomorrow; a weekday named today, next week.
+        if date <= now, day == nil || bareWeekday { date = cal.date(byAdding: .day, value: day == nil ? 1 : 7, to: date)! }
+        return (date, title())
+    }
+}
+
 /// Small window: what, when, which calendar.
-final class ReminderForm: NSObject {
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 262),
+final class ReminderForm: NSObject, NSTextFieldDelegate {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 380, height: 282),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
     let titleField = NSTextField()
     let picker = NSDatePicker()
     let addToCalendar = NSButton(checkboxWithTitle: "เพิ่มลงปฏิทิน", target: nil, action: nil)
     let calendarPopup = NSPopUpButton()
     let note = NSTextField(labelWithString: "")
+    /// Under the title: the time read out of what was typed.
+    let understood = NSTextField(labelWithString: "")
     let store: ReminderStore
     var onSaved: (() -> Void)?
     var calendars: [EKCalendar] = []
@@ -996,10 +1137,16 @@ final class ReminderForm: NSObject {
             l.frame = NSRect(x: 20, y: y, width: 340, height: 17)
             v.addSubview(l)
         }
-        label("จะทำอะไร", y: 230)
-        titleField.placeholderString = "เช่น ประชุมทีม, โทรหาแม่"
-        titleField.frame = NSRect(x: 20, y: 202, width: 340, height: 24)
+        label("จะทำอะไร (พิมพ์เวลาไปด้วยก็ได้)", y: 250)
+        titleField.placeholderString = "เช่น พรุ่งนี้ 10 โมง ส่งรายงาน"
+        titleField.frame = NSRect(x: 20, y: 222, width: 340, height: 24)
+        titleField.delegate = self
         v.addSubview(titleField)
+        understood.font = .systemFont(ofSize: 11)
+        understood.textColor = .systemBlue
+        understood.lineBreakMode = .byTruncatingTail
+        understood.frame = NSRect(x: 20, y: 200, width: 340, height: 16)
+        v.addSubview(understood)
 
         label("เมื่อไร", y: 174)
         picker.datePickerStyle = .textFieldAndStepper
@@ -1041,8 +1188,18 @@ final class ReminderForm: NSObject {
         v.addSubview(ok)
     }
 
+    /// As you type: a phrase that names a time sets the date picker and shows how it was read.
+    func controlTextDidChange(_ obj: Notification) { readPhrase() }
+    func readPhrase() {
+        guard let p = ReminderParser.parse(titleField.stringValue) else { understood.stringValue = ""; return }
+        picker.dateValue = p.date
+        understood.stringValue = "⏰ \(Self.phraseTime.string(from: p.date))" + (p.title.isEmpty ? "" : " · \(p.title)")
+    }
+    static let phraseTime: DateFormatter = { let f = DateFormatter(); f.locale = Locale(identifier: "th_TH"); f.dateFormat = "EEE d MMM HH:mm"; return f }()
+
     func show() {
         titleField.stringValue = ""
+        understood.stringValue = ""
         note.stringValue = ""
         // Next half hour.
         let now = Date().timeIntervalSince1970
@@ -1083,7 +1240,9 @@ final class ReminderForm: NSObject {
     @objc func cancel() { window.close() }
 
     @objc func save() {
-        let title = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The time words go to the date picker (already set while typing), the rest is the title.
+        let typed = titleField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = ReminderParser.parse(typed)?.title ?? typed
         guard !title.isEmpty else { note.stringValue = "ใส่ก่อนว่าจะทำอะไรนะ~"; NSSound.beep(); return }
         guard picker.dateValue.timeIntervalSinceNow > -60 else { note.stringValue = "เวลานี้ผ่านไปแล้ว เลือกเวลาใหม่นะ"; NSSound.beep(); return }
         let useCalendar = addToCalendar.isEnabled && addToCalendar.state == .on
@@ -4908,6 +5067,17 @@ func setTransientHotKeys(_ keys: [(Int, () -> Void)]) {
 
 // MARK: - App entry
 
+// Debug: ANGELING_PARSE="พรุ่งนี้ 10 โมง ส่งรายงาน;บ่ายสาม ประชุม" prints how each phrase is read as a reminder, then quits.
+if let phrases = ProcessInfo.processInfo.environment["ANGELING_PARSE"] {
+    let f = DateFormatter()
+    f.calendar = Calendar(identifier: .gregorian)
+    f.dateFormat = "EEE yyyy-MM-dd HH:mm"
+    for p in phrases.split(separator: ";").map(String.init) {
+        print(p, "=>", ReminderParser.parse(p).map { "\(f.string(from: $0.date)) | \($0.title)" } ?? "-")
+    }
+    exit(0)
+}
+
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 try? FileManager.default.createDirectory(at: stateDir, withIntermediateDirectories: true)
@@ -4987,7 +5157,7 @@ if let snap = ProcessInfo.processInfo.environment["ANGELING_SNAPSHOT"] {
     if let a = env["ANGELING_ANIM"] { controller.setOverride(a, for: 10) }
     if env["ANGELING_LATEST_VERSION"] != nil || env["ANGELING_FAKE_VERSION"] != nil { controller.checkForUpdates(manual: false) }
     if let t = env["ANGELING_SETTINGS"] { controller.settings.show(SettingsTab(rawValue: t) ?? .general) }
-    if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = "ประชุมทีม" }
+    if env["ANGELING_FORM"] != nil { controller.reminderForm.window.appearance = NSAppearance(named: .aqua); controller.reminderForm.show(); controller.reminderForm.titleField.stringValue = env["ANGELING_FORM"] == "1" ? "ประชุมทีม" : env["ANGELING_FORM"]!; controller.reminderForm.readPhrase() }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
         let windowed = env["ANGELING_FORM"] != nil || env["ANGELING_SETTINGS"] != nil || env["ANGELING_MENU"] != nil
         let v = env["ANGELING_MENU"] != nil ? menuPreview(controller.makeMenu(forStatusBar: true))
