@@ -1,0 +1,31 @@
+docs/Development.md
+  s_7a61dd736ef877::t_d188750fbd30f9 66-67
+CLAUDE.md
+  s_7a61dd736ef877::t_d188750fbd30f9 39
+README.md
+  s_7a61dd736ef877::t_d188750fbd30f9 79
+src/main.swift
+  s_7a61dd736ef877::t_f32daca44e7abe 973-987,991-1045,1047-1048,1051-1063,1065-1068,1070-1073,1075-1085,1087-1106,1108-1111
+  s_7a61dd736ef877::t_4d70e9dd650267 1046,1086,1107,1113-1114,1121-1122,1140-1143,1145-1149,1191-1199,1202,1243-1245,5070-5072,5074-5080,5160
+  s_7a61dd736ef877::t_a7c8519b140400 1049-1050,1064,1069,1074
+  s_7a61dd736ef877::t_3fcf15171dc97f 988-990,5073
+docs/Reminders.md
+  s_7a61dd736ef877::t_d188750fbd30f9 10-11,17-46
+  s_7a61dd736ef877::t_7682f59561662a 47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "020f612e8834f42032de9e942ebb4acfc86e41ad",
+  "prompts": {},
+  "sessions": {
+    "s_7a61dd736ef877": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "51650e3b-3a23-481a-a5d4-f73ecb2c9098",
+        "model": "claude-fable-5-2"
+      },
+      "human_author": "chaipaphat.kae <k.chaipaphat@gmail.com>"
+    }
+  }
+}
